@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050812">
+  <title>Pac-Man — Arcade</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background: #050812; color: #f8f7eb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(ellipse at 50% 35%, #111b35 0, #080d1a 38%, #050812 75%); }
+    .cabinet { width: min(100%, 760px); }
+    .topline { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin: 0 auto 10px; max-width: 560px; }
+    .brand { color: #ffe500; font-weight: 900; letter-spacing: .18em; font-size: clamp(20px, 4vw, 28px); text-shadow: 0 0 18px #ffe50055; }
+    .edition { color: #7786aa; text-transform: uppercase; font-size: 10px; letter-spacing: .17em; text-align: right; }
+    .screen { position: relative; display: flex; justify-content: center; margin: auto; width: min(100%, 560px); aspect-ratio: 28 / 31; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    canvas { display: block; width: auto; height: auto; max-width: 100%; aspect-ratio: 28 / 31; margin: auto; image-rendering: pixelated; background: #000; }
+    .actor-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+    .wall-overlay { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; image-rendering: pixelated; background: transparent; }
+    .actor-marker { position: absolute; transform: translate(-50%, -50%); }
+    .pacman-marker { border-radius: 50%; background: #ffe500; box-shadow: 0 0 8px #ffe500aa; }
+    .pacman-marker::after { content: ''; position: absolute; left: 50%; top: 50%; width: 62%; height: 62%; background: #000; clip-path: polygon(0 50%, 100% 0, 100% 100%); transform: translateY(-50%) rotate(var(--mouth-angle, 180deg)); transform-origin: 0 50%; }
+    .pacman-marker.sprite { border-radius: 0; background-color: transparent; background-repeat: no-repeat; box-shadow: none; mix-blend-mode: screen; transform: translate(-50%, -50%) rotate(var(--facing, 0deg)); }
+    .pacman-marker.sprite::after { display: none; }
+    .pacman-marker.dead { transform: translate(-50%, -50%) rotate(var(--facing, 0deg)); box-shadow: none; }
+    .ghost-marker { background: var(--ghost-color); border-radius: 50% 50% 4% 4%; clip-path: polygon(0 24%, 12% 0, 50% 0, 88% 0, 100% 24%, 100% 100%, 75% 82%, 50% 100%, 25% 82%, 0 100%); }
+    .ghost-marker.frightened { background: #254ce9; }
+    .ghost-marker.sprite { background-color: transparent; background-repeat: no-repeat; border-radius: 0; clip-path: none; mix-blend-mode: screen; }
+    .ghost-marker.sprite .eye { display: none; }
+    .ghost-marker.eyes { --ghost-color: #f1eee5; background: #f1eee5; border-radius: 50%; clip-path: none; }
+    .ghost-marker .eye { position: absolute; top: 28%; width: 26%; height: 38%; border-radius: 50%; background: #fff; }
+    .ghost-marker .eye:first-child { left: 22%; }.ghost-marker .eye:last-child { right: 22%; }
+    .ghost-marker .eye i { position: absolute; top: 42%; left: 38%; width: 42%; height: 42%; border-radius: 50%; background: #173cbd; }
+    .ghost-marker .eye i { transform: translate(var(--eye-x, 0), var(--eye-y, 0)); }
+    .ghost-marker.frightened .eye { display: none; }
+    .ghost-marker.eyes { background: transparent; clip-path: none; }
+    .ghost-marker.eyes .eye { display: block; }
+    .pacman-marker.dead-fold { background-color: #ffe500; background-image: none !important; border-radius: 50%; mix-blend-mode: screen; -webkit-mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); }
+    .points-marker { width: 32px; min-height: 14px; color: #fff; font: 700 8px ui-monospace, monospace; line-height: 14px; text-align: center; text-shadow: 0 0 4px #fff; white-space: nowrap; }
+    .stats { width: min(100%, 560px); margin: 12px auto 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: #aeb8d0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    .stat-value { display: block; margin-top: 5px; color: #fff; font-size: 18px; letter-spacing: .02em; }
+    .stat:nth-child(2) { text-align: center; }
+    .stat:last-child { text-align: right; }
+    .status { color: #ffe500; font-size: 11px; letter-spacing: .13em; text-align: center; min-height: 15px; }
+    .bottom { width: min(100%, 560px); margin: 12px auto 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .help { color: #8490aa; font: 11px/1.65 system-ui, sans-serif; }
+    kbd { color: #dce4f7; border: 1px solid #354264; border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; font: 10px ui-monospace, monospace; }
+    button { color: #07101d; background: #ffe500; border: 0; border-radius: 4px; padding: 10px 14px; font: 800 11px ui-monospace, monospace; letter-spacing: .1em; cursor: pointer; }
+    button:hover { background: #fff06a; }
+    .touch { display: none; width: 150px; grid-template: repeat(3, 42px) / repeat(3, 42px); gap: 4px; margin: 18px auto 0; }
+    .touch button { padding: 0; font-size: 18px; background: #151e35; color: #f5dc42; border: 1px solid #34466f; touch-action: none; }
+    .touch button:active { background: #26385f; }
+    .touch .up { grid-area: 1 / 2; }.touch .left { grid-area: 2 / 1; }.touch .down { grid-area: 2 / 2; }.touch .right { grid-area: 2 / 3; }
+    @media (pointer: coarse) { .touch { display: grid; } }
+    @media (max-width: 520px) { body { padding: 10px 12px; }.bottom { align-items: start; } }
+  </style>
+</head>
+<body>
+  <main class="cabinet">
+    <header class="topline"><div class="brand">PAC—MAN</div><div class="edition">Maze chase · 1980<br>One player</div></header>
+    <div class="screen">
+      <canvas id="game" width="224" height="248" aria-label="Pac-Man arcade game"></canvas>
+      <div class="actor-layer" aria-hidden="true">
+        <div class="actor-marker pacman-marker" id="pacman-marker"></div>
+        <div class="actor-marker ghost-marker" data-ghost="blinky" style="--ghost-color:#ed1b24"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
+        <div class="actor-marker ghost-marker" data-ghost="pinky" style="--ghost-color:#ff9cce"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
+        <div class="actor-marker ghost-marker" data-ghost="inky" style="--ghost-color:#20dafa"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
+        <div class="actor-marker ghost-marker" data-ghost="clyde" style="--ghost-color:#ff9b21"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
+        <div class="actor-marker points-marker" id="points-marker"></div>
+      </div>
+      <canvas class="wall-overlay" id="wall-overlay" width="224" height="248" aria-hidden="true"></canvas>
+    </div>
+    <section class="stats" aria-live="polite">
+      <div class="stat">Score<span class="stat-value" id="score">000000</span></div>
+      <div class="status" id="status">READY</div>
+      <div class="stat">Best<span class="stat-value" id="best">000000</span></div>
+    </section>
+    <div class="touch" aria-label="Touch controls"><button class="up" data-dir="up" aria-label="Up">▲</button><button class="left" data-dir="left" aria-label="Left">◀</button><button class="down" data-dir="down" aria-label="Down">▼</button><button class="right" data-dir="right" aria-label="Right">▶</button></div>
+  </main>
+<script>
+(() => {
+  const canvas = document.querySelector('#game');
+  const screen = document.querySelector('.screen');
+  const ctx = canvas.getContext('2d');
+  const wallOverlay = document.querySelector('#wall-overlay');
+  const wallCtx = wallOverlay.getContext('2d');
+  const pacMarker = document.querySelector('#pacman-marker');
+  const ghostMarkers = [...document.querySelectorAll('.ghost-marker')];
+  const pointsMarker = document.querySelector('#points-marker');
+  const atlas = new Image();
+  const wallPixels = new Uint8Array(canvas.width * canvas.height);
+  let pacSpriteOffsets = [];
+  let wallMaskReady = false;
+  atlas.onload = () => {
+    const source = document.createElement('canvas');
+    source.width = canvas.width; source.height = canvas.height;
+    const sourceCtx = source.getContext('2d', { willReadFrequently: true });
+    sourceCtx.drawImage(atlas, 228, 0, 224, 248, 0, 0, 224, 248);
+    const pixels = sourceCtx.getImageData(0, 0, 224, 248);
+    const visible = wallCtx.createImageData(224, 248);
+    for (let i = 0; i < wallPixels.length; i++) {
+      const p = i * 4, r = pixels.data[p], g = pixels.data[p + 1], b = pixels.data[p + 2];
+      // Use the blue wall pixels from the unmodified supplied map for both collision and wall rendering.
+      if (b > 100 && b > r * 1.45 && b > g * 1.2) {
+        wallPixels[i] = 1;
+        visible.data[p] = r; visible.data[p + 1] = g; visible.data[p + 2] = b; visible.data[p + 3] = 255;
+      }
+    }
+    const sheet = document.createElement('canvas');
+    sheet.width = 680; sheet.height = 248;
+    const sheetCtx = sheet.getContext('2d', { willReadFrequently: true });
+    sheetCtx.drawImage(atlas, 0, 0, 680, 248);
+    const sheetData = sheetCtx.getImageData(0, 0, 680, 248).data;
+    const addFrames = (target, frames) => {
+      const mask = new Set();
+      for (const [sx, sy] of frames) for (let v = 0; v < 16; v++) for (let u = 0; u < 16; u++) {
+        const p = ((sy + v) * 680 + sx + u) * 4;
+        if (sheetData[p] + sheetData[p + 1] + sheetData[p + 2] > 70) mask.add(`${u - 8},${v - 8}`);
+      }
+      return [...mask].map(point => point.split(',').map(Number));
+    };
+    pacSpriteOffsets = addFrames(pacSpriteOffsets, [[456,0],[472,0],[488,0]]);
+    wallCtx.putImageData(visible, 0, 0);
+    wallMaskReady = true;
+  };
+  const atlasData = [
+    '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'
+  ].join('');
+  atlas.src = `data:image/png;base64,${atlasData}`;
+  const sheetImage = `url("data:image/png;base64,${atlasData}")`;
+  const COLS = 28, ROWS = 31, TILE = 8, HALF = TILE / 2, TUNNEL_ROW = 14;
+  const directions = { right:[1,0], down:[0,1], left:[-1,0], up:[0,-1] };
+  const directionOrder = ['up','left','down','right'];
+  const opposite = { right:'left', left:'right', up:'down', down:'up' };
+  const colors = { blinky:'#ed1b24', pinky:'#ff9cce', inky:'#20dafa', clyde:'#ff9b21' };
+  const MAZE_ROWS = [
+    '#             #             ', '             #             #', '   ##   ###  #   ###   ##  #', '  #    #     #  #     #    #',
+    '                           #', '                           #', '   ##      ######      ##  #', '       #      #    #       #',
+    '       #     #     #       #', ' ####  # ##  #   ##    #### ', '       ##             #     ', '       #           #  #     ',
+    '       #  ###  ##  #  #     ', '          #                 ', '          #                 ', '#####     #            #####',
+    '       #           #  #     ', '       #           #  #     ', '       #   ######  #  #     ', '#             #             ',
+    '             #             #', '   ##   ###  #   ###   ##  #', '                      ##   #', '    #                 #    #',
+    ' #  #      ######     #   # ', '#      #      #    #        ', '       #     #     #       #', '   ####  ##  #   ##  ####  #',
+    '                           #', '                           #', ' ########################## '
+  ];
+  // Each hex digit stores legal center-to-center paths: R=1, D=2, L=4, U=8.
+  // These connections were sampled against the blue lines in the supplied maze.
+  const EDGE_ROWS = [
+    '0377777777776003777777777760', '3ffddfffdddfe03ffdddfffddfe0', 'bfc00bfc000be0bfc000bfc00be0', 'be014be0154be0be0154be014be0',
+    'bf777ff7777ff7ff7777ff777fe0', 'bffddffffffddddddffffffddfe0', 'bfc00bfcbfc000000bfcbfc00be0', 'bf777fe0bf7760037fe0bf777fe0',
+    '9ddddfe09ddfe03ffdc0bffdddc0', '00000be0000be0bfc002bfc00000', '37776be0037ff7ff7768be037776', 'bfffebe03fdddffddfe0be0bfffe',
+    '9dddcbe0be000be00be0be09dddc', '37777ff7fe037ff76bf7ff777776', '9ddddffffe0bffffebfffffddddc', '00000bfcbe09ddddcbfcbfc00000',
+    '37776be0bf7777777fe0be037776', 'bfffebe0bffddddddfe0be0bfffe', '9dddcbe0bfc000000be0be09dddc', '03777ff7ff7760037ff7ff777760',
+    '3ffddfffdddfe03ffdddfffddfe0', 'bfc00bfc000be0bfc000bfc00be0', 'bf760bf7777ff7ff7777fe003fe0', '9dfe0bfffffddddddffffe03ffc0',
+    '00be0bfcbfc000000bfcbe0bfc02', '03ff7fe0bf7760037fe0bf7ff768', '3ffdddc09ddfe03ffdc09ddddfe0', 'bfc00001400be0bfc00140000be0',
+    'bf777777777ff7ff777777777fe0', '9dddddddddddddddddddddddddc0', '0000000000000000000000000000'
+  ];
+  const PELLET_ROWS = [
+    '                            ', ' ............  ............ ', ' .    .     .  .     .    . ', ' o    .     .  .     .    o ',
+    ' .    .     .  .     .    . ', ' .......................... ', ' .    .  .        .  .    . ', ' .    .  .        .  .    . ',
+    ' ......  ....  ....  ...... ', '      .              .      ', '      .              .      ', '      .              .      ',
+    '      .              .      ', '      .              .      ', '      .              .      ', '      .              .      ',
+    '      .              .      ', '      .              .      ', '      .              .      ', '      .              .      ',
+    ' ............  ............ ', ' .    .     .  .     .    . ', ' .    .     .  .     .    . ', ' o..  .......  .......  ..o ',
+    '   .  .  .        .  .  .   ', '   .  .  .        .  .  .   ', ' ......  ....  ....  ...... ', ' .          .  .          . ',
+    ' .          .  .          . ', ' .......................... ', '                            '
+  ];
+  const names = ['blinky','pinky','inky','clyde'];
+  const startTiles = [{c:12,r:14},{c:13,r:14},{c:14,r:14},{c:15,r:14}];
+  const house = new Set(['12,14','13,14','14,14','15,14','12,15','13,15','14,15','15,15']);
+  const corners = { blinky:[26,0], pinky:[1,0], inky:[26,30], clyde:[1,30] };
+  let walls = Array.from({length:ROWS},()=>Array(COLS).fill(true));
+  let dots = new Map(), totalDots = 0, remaining = 0;
+  function readBest(){try{return Number(window.localStorage.getItem('pacman-best')||0);}catch{return 0;}}
+  function saveBest(value){try{window.localStorage.setItem('pacman-best',String(value));}catch{}}
+  let player, ghosts, fruits=[], score=0, best=readBest(), lives=3, level=1;
+  let state='ready', lastTime=0, elapsed=0, modeIndex=0, modeTime=0, frightened=0, eatChain=0, dotCount=0, deathTime=0, deathPacFrame=2, clearTime=0, releaseTime=0, released=0, readyTime=0, ghostFreeze=0, ghostEatScore=0, ghostEatX=0, ghostEatY=0, extraLife=false;
+  const DEATH_IMPACT=1, DEATH_FOLD=1.2, DEATH_SPARK=.22, DEATH_EMPTY=.35;
+  const DEATH_TOTAL=DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK+DEATH_EMPTY;
+  const modeDurations = [7,20,7,20,5,20,5,Infinity];
+  const speeds = { player:.105, ghost:.092, frightened:.064, tunnel:.065 };
+  const scoreEl=document.querySelector('#score'), bestEl=document.querySelector('#best'), statusEl=document.querySelector('#status');
+  bestEl.textContent=String(best).padStart(6,'0');
+  const keyFor=(c,r)=>`${c},${r}`;
+  const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+  function initializeMaze(){
+    walls=MAZE_ROWS.map(row=>Array.from(row,cell=>cell==='#'));
+    dots.clear(); totalDots=0;
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const mark=PELLET_ROWS[r][c],k=keyFor(c,r);
+      if(mark==='.'||mark==='o'){dots.set(k,mark==='o'?'power':'dot');totalDots++;}
+    }
+    remaining=totalDots;
+  }
+  function center(c,r){return {x:c*TILE+HALF,y:r*TILE+HALF};}
+  function makePlayer(){ const p=center(13,23); return {x:p.x,y:p.y,dir:'left',want:null,mouth:0,alive:true}; }
+  function makeGhost(name,index){ const t=startTiles[index], p=center(t.c,t.r); return {name,index,x:p.x,y:p.y,dir:index===0?'left':'up',mode:'house',houseTimer:index*2.5,releaseQuota:[0,0,30,60][index],fright:0,eyes:false,anim:0,reversePending:false}; }
+  function resetRound(keepDots=true){
+    player=makePlayer(); ghosts=names.map(makeGhost); frightened=0; eatChain=0; modeIndex=0; modeTime=0; released=0; releaseTime=0; ghostFreeze=0; ghostEatScore=0;
+    if(!keepDots){ initializeMaze(); dotCount=0; fruits=[]; }
+  }
+  resetRound(true);
+  function updateHUD(){ scoreEl.textContent=String(score).padStart(6,'0'); bestEl.textContent=String(best).padStart(6,'0'); }
+  function addScore(points){ score+=points; if(score>best){best=score;saveBest(best);} if(!extraLife&&score>=10000){lives++;extraLife=true;} updateHUD(); }
+  function tileAt(x,y){return {c:Math.floor(x/TILE),r:Math.floor(y/TILE)};}
+  function walkable(c,r,actor){
+    if(r<0||r>=ROWS)return false;
+    if(c<0||c>=COLS)return r===TUNNEL_ROW;
+    const k=keyFor(c,r);
+    if(house.has(k)&&actor!=='eyes'&&actor!=='exiting')return false;
+    if(house.has(k)&&(actor==='eyes'||actor==='exiting'))return true;
+    if(!walls[r][c])return true;
+    return actor==='ghost' && c>=12&&c<=15&&r===13;
+  }
+  function canStep(actor,c,r,dir){
+    const [dx,dy]=directions[dir],nc=c+dx,nr=r+dy;
+    if(!walkable(nc,nr,actor))return false;
+    if(r===TUNNEL_ROW&&((c===0&&dir==='left')||(c===COLS-1&&dir==='right')))return true;
+    if(c<0||c>=COLS||r<0||r>=ROWS)return false;
+    // The middle tunnel is a continuous horizontal corridor. Validate it against
+    // the supplied blue walls, while ignoring the approximate edge table there.
+    if(r===TUNNEL_ROW&&(dir==='left'||dir==='right'))return pathHasClearance(c,r,dir,actor);
+    const bit={right:1,down:2,left:4,up:8}[dir];
+    if((parseInt(EDGE_ROWS[r][c],16)&bit)===0)return false;
+    return pathHasClearance(c,r,dir,actor);
+  }
+  function hitsWallAt(x,y,radius=6){
+    for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
+      if(ox*ox+oy*oy>radius*radius)continue;
+      const px=Math.floor(x+ox),py=Math.floor(y+oy);
+      if(px<0||px>=canvas.width||py<0||py>=canvas.height)continue;
+      if(wallPixels[py*canvas.width+px])return true;
+    }
+    return false;
+  }
+  function spriteHitsWall(x,y,dir){
+    for(const [ox,oy] of pacSpriteOffsets){
+      let rx=ox,ry=oy;
+      if(dir==='down'){rx=-oy;ry=ox;}
+      else if(dir==='left'){rx=-ox;ry=-oy;}
+      else if(dir==='up'){rx=oy;ry=-ox;}
+      const px=Math.floor(x+rx),py=Math.floor(y+ry);
+      if(px>=0&&px<canvas.width&&py>=0&&py<canvas.height&&wallPixels[py*canvas.width+px])return true;
+    }
+    return false;
+  }
+  function pathHasClearance(c,r,dir,actor){
+    if(!wallMaskReady)return true;
+    const [dx,dy]=directions[dir],nx=c+dx,ny=r+dy;
+    // The provided map marks the ghost gate in blue; released and returning ghosts use its opening.
+    if((actor==='exiting'&&dir==='up'||actor==='eyes'&&dir==='down')&&r===13&&(c===13||c===14))return true;
+    const from=center(c,r),to=center(nx,ny),steps=TILE*2;
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      const x=from.x+(to.x-from.x)*t,y=from.y+(to.y-from.y)*t;
+      if(actor==='player'?spriteHitsWall(x,y,dir):hitsWallAt(x,y,4))return false;
+    }
+    return true;
+  }
+  function choosePlayerDir(c,r){
+    const open=directionOrder.filter(dir=>canStep('player',c,r,dir));
+    // A held joystick wish wins when it is legal; otherwise keep the current heading.
+    if(player.want&&open.includes(player.want))return player.want;
+    if(player.dir&&open.includes(player.dir))return player.dir;
+    return null;
+  }
+  function tryPlayerCornerCut(actor){
+    if(!actor.want||actor.toX==null)return;
+    const [mx,my]=directions[actor.dir],[tx,ty]=directions[actor.want];
+    if(mx*tx+my*ty!==0)return;
+    const remain=Math.abs(actor.toX-actor.x)+Math.abs(actor.toY-actor.y);
+    if(remain>4.5)return;
+    const c=Math.round((actor.toX-HALF)/TILE),r=Math.round((actor.toY-HALF)/TILE);
+    if(!canStep('player',c,r,actor.want))return;
+    const endX=actor.toX+tx*5,endY=actor.toY+ty*5;
+    const distance=Math.hypot(endX-actor.x,endY-actor.y),samples=Math.ceil(distance/.5);
+    for(let i=0;i<=samples;i++){
+      const t=i/samples;
+      if(spriteHitsWall(actor.x+(endX-actor.x)*t,actor.y+(endY-actor.y)*t,actor.want))return;
+    }
+    actor.dir=actor.want;actor.toX=endX;actor.toY=endY;
+  }
+  function updateActor(actor,dt,actorType,speed){
+    actor.anim=(actor.anim||0)+dt;
+    const movementType=actorType==='ghost'&&actor.exitingHouse?'exiting':actorType;
+    if(actor.toX==null){
+      const c=Math.round((actor.x-HALF)/TILE),r=Math.round((actor.y-HALF)/TILE);
+      if(actorType!=='player'){actor.x=c*TILE+HALF;actor.y=r*TILE+HALF;}
+      if(actorType==='player'){
+        const nextDir=choosePlayerDir(c,r);
+        if(nextDir)actor.dir=nextDir;
+      }
+      if(!actor.dir||!canStep(movementType,c,r,actor.dir)){
+        return;
+      }
+      const [dx,dy]=directions[actor.dir];
+      actor.fromX=actor.x;actor.fromY=actor.y;
+      actor.toX=(c+dx)*TILE+HALF;actor.toY=(r+dy)*TILE+HALF;
+    }
+    const mult=(actorType==='ghost'&&frightened>0&&!actor.eyes)?0.66:1;
+    if(actorType==='player')tryPlayerCornerCut(actor);
+    const step=speed*dt*60*mult*TILE;
+    const dx=actor.toX-actor.x,dy=actor.toY-actor.y,dist=Math.hypot(dx,dy);
+    if(step>=dist){
+      actor.x=actor.toX;actor.y=actor.toY;
+      if(actor.x<0)actor.x=canvas.width-HALF;
+      else if(actor.x>=canvas.width)actor.x=HALF;
+      actor.toX=null;actor.toY=null;
+    }else{actor.x+=dx/dist*step;actor.y+=dy/dist*step;}
+  }
+  function nearestWalkable(c,r){
+    const queue=[[c,r]],seen=new Set();
+    while(queue.length){const [x,y]=queue.shift(),k=keyFor(x,y);if(seen.has(k))continue;seen.add(k);if(walkable(x,y,'ghost')&&!house.has(k))return [x,y];for(const d of directionOrder){const [dx,dy]=directions[d];if(x+dx>=0&&x+dx<COLS&&y+dy>=0&&y+dy<ROWS)queue.push([x+dx,y+dy]);}}
+    return [13,23];
+  }
+  function targetFor(g){
+    if(g.mode==='house')return [13,13];
+    if(g.eyes)return [13,14];
+    const pt=tileAt(player.x,player.y), home=corners[g.name];
+    if(frightened>0)return [Math.random()*COLS,Math.random()*ROWS];
+    if(modeIndex%2===0)return home;
+    if(g.name==='blinky')return [pt.c,pt.r];
+    if(g.name==='pinky'){
+      const [dx,dy]=directions[player.dir||player.want||'left'];
+      return dy<0?[pt.c-4,pt.r-4]:[pt.c+dx*4,pt.r+dy*4];
+    }
+    if(g.name==='inky'){
+      const [dx,dy]=directions[player.dir||player.want||'left'];
+      const aheadX=pt.c+dx*2-(dy<0?2:0),aheadY=pt.r+dy*2;
+      const b=tileAt(ghosts[0].x,ghosts[0].y);
+      return [b.c+2*(aheadX-b.c),b.r+2*(aheadY-b.r)];
+    }
+    const dx=pt.c-tileAt(g.x,g.y).c,dy=pt.r-tileAt(g.x,g.y).r;
+    return Math.hypot(dx,dy)>8? [pt.c,pt.r]:home;
+  }
+  function atDecision(g){const t=tileAt(g.x,g.y);return Math.abs(g.x-(t.c*TILE+HALF))<1.5&&Math.abs(g.y-(t.r*TILE+HALF))<1.5;}
+  function eyesDistance(startC,startR){
+    const queue=[[startC,startR,0]],seen=new Set();
+    while(queue.length){
+      const [c,r,distance]=queue.shift(),key=keyFor(c,r);
+      if(seen.has(key))continue;
+      seen.add(key);
+      if(c===13&&r===14)return distance;
+      for(const dir of directionOrder){
+        if(!canStep('eyes',c,r,dir))continue;
+        const [dx,dy]=directions[dir];let nc=c+dx,nr=r+dy;
+        if(nr===TUNNEL_ROW&&nc<0)nc=COLS-1;
+        else if(nr===TUNNEL_ROW&&nc>=COLS)nc=0;
+        if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;
+        const next=keyFor(nc,nr);
+        if(!seen.has(next))queue.push([nc,nr,distance+1]);
+      }
+    }
+    return Infinity;
+  }
+  function chooseGhostDir(g){
+    const t=tileAt(g.x,g.y), choices=[];
+    if(g.reversePending){g.reversePending=false;return opposite[g.dir]||'up';}
+    for(const dir of directionOrder){if(dir===opposite[g.dir])continue;if(!canStep(g.eyes?'eyes':'ghost',t.c,t.r,dir))continue;
+      if(dir==='up'&&frightened<=0&&!g.eyes&&((t.r===12&&t.c>=11&&t.c<=16)||(t.r===8&&(t.c===6||t.c===21))))continue;
+      choices.push(dir);
+    }
+    if(!choices.length){
+      const rev=opposite[g.dir];
+      if(rev&&canStep(g.eyes?'eyes':'ghost',t.c,t.r,rev))return rev;
+      return g.dir||'up';
+    }
+    if(g.eyes){
+      choices.sort((a,b)=>{
+        const [adx,ady]=directions[a],[bdx,bdy]=directions[b];
+        return eyesDistance(t.c+adx,t.r+ady)-eyesDistance(t.c+bdx,t.r+bdy)||directionOrder.indexOf(a)-directionOrder.indexOf(b);
+      });
+      return choices[0];
+    }
+    if(frightened>0&&!g.eyes)return choices[Math.floor(Math.random()*choices.length)];
+    const target=targetFor(g);
+    choices.sort((a,b)=>{
+      const [adx,ady]=directions[a],[bdx,bdy]=directions[b];
+      const da=(t.c+adx-target[0])**2+(t.r+ady-target[1])**2;
+      const db=(t.c+bdx-target[0])**2+(t.r+bdy-target[1])**2;
+      return da-db||directionOrder.indexOf(a)-directionOrder.indexOf(b);
+    });
+    return choices[0];
+  }
+  function releaseGhosts(dt){
+    releaseTime+=dt;
+    for(let i=0;i<ghosts.length;i++){
+      const g=ghosts[i]; if(g.mode!=='house')continue;
+      // Start Blinky early enough to clear the box by 1.5s; stagger later ghosts by 1s.
+      if(releaseTime>=.75+i) {g.mode='active';g.dir='up';g.exitingHouse=true;g.y=center(13,14).y;released++;}
+    }
+  }
+  function tickGhost(g,dt){
+    if(g.mode==='house'){
+      g.y += Math.sin(elapsed*5+g.houseTimer)*.24;
+      return;
+    }
+    const t=tileAt(g.x,g.y);
+    if(g.eyes&&t.c===13&&t.r===14){
+      const slot=center(startTiles[g.index].c,startTiles[g.index].r);
+      g.eyes=false;g.mode='house';g.x=slot.x;g.y=slot.y;g.houseTimer=0;g.dir='up';return;
+    }
+    if(g.toX==null&&atDecision(g)){
+      g.x=t.c*TILE+HALF;g.y=t.r*TILE+HALF;
+      if(g.exitingHouse){
+        const c=Math.round((g.x-HALF)/TILE);
+        g.dir=c<13?'right':c>13?'left':'up';
+      }else g.dir=chooseGhostDir(g);
+    }
+    let s=g.eyes?(g.currentSpeed||speeds.ghost)*1.4:(g.currentSpeed||speeds.ghost);
+    if(frightened>0&&!g.eyes)s=speeds.frightened;
+    if(tileAt(g.x,g.y).r===TUNNEL_ROW&&(tileAt(g.x,g.y).c<5||tileAt(g.x,g.y).c>22)&&!g.eyes)s=speeds.tunnel;
+    updateActor(g,dt,g.eyes?'eyes':'ghost',s);
+    // Keep the gate exception until the ghost has cleared the whole doorway.
+    if(g.exitingHouse&&g.y<=11*TILE+HALF)g.exitingHouse=false;
+    if(g.eyes){const [c,r]=nearestWalkable(...Object.values(tileAt(g.x,g.y))); if(r===14&&c===13){g.x=center(13,14).x;g.y=center(13,14).y;}}
+  }
+  function consumeDotAt(c,r){
+    const k=keyFor(c,r),kind=dots.get(k);
+    if(!kind)return;
+    dots.delete(k);remaining--;dotCount++;
+    if(kind==='power'){
+      addScore(50);frightened=level>=19?0:Math.max(.5,6-level*.35);eatChain=0;
+      for(const g of ghosts)if(g.mode==='active'&&!g.eyes)g.reversePending=true;
+    }
+    else addScore(10);
+    if(dotCount===70||dotCount===170)fruits.push({x:center(13,17).x,y:center(13,17).y,life:9,value:level===1?100:level<4?300:500});
+    if(remaining<=0&&level<256){state='clearing';clearTime=0;player.dir=null;}
+  }
+  function consumeDotsAlongPath(x0,y0,x1,y1){
+    const distance=Math.hypot(x1-x0,y1-y0),samples=Math.max(1,Math.ceil(distance/.5));
+    for(let i=0;i<=samples;i++){
+      const t=i/samples,x=x0+(x1-x0)*t,y=y0+(y1-y0)*t;
+      const c=Math.round((x-HALF)/TILE),r=Math.round((y-HALF)/TILE),p=center(c,r);
+      if(Math.hypot(x-p.x,y-p.y)<=4.5)consumeDotAt(c,r);
+      if(state==='clearing')return;
+    }
+  }
+  function update(dt){
+    if(state==='ready'){
+      readyTime+=dt;
+      if(readyTime>=1.2){state='playing';player.dir='left';player.want=null;statusEl.textContent='';}
+      return;
+    }
+    if(state==='paused')return;
+    if(state==='dead'){
+      deathTime+=dt;
+      if(deathTime>=DEATH_IMPACT)fruits=[];
+      if(deathTime>=DEATH_TOTAL){
+        lives--;
+        if(lives>0){resetRound(true);state='ready';readyTime=0;statusEl.textContent='READY';}
+        else{state='over';statusEl.textContent='GAME OVER';}
+      }
+      return;
+    }
+    if(ghostFreeze>0){ghostFreeze=Math.max(0,ghostFreeze-dt);if(ghostFreeze===0)ghostEatScore=0;return;}
+    if(state==='clearing'){
+      clearTime+=dt;if(clearTime>1.8){level++;resetRound(false);state='ready';readyTime=0;statusEl.textContent='READY';}return;
+    }
+    if(state!=='playing')return;
+    elapsed+=dt;
+    if(frightened>0){frightened=Math.max(0,frightened-dt);if(!frightened)eatChain=0;}
+    else {
+      modeTime+=dt;
+      const isScatter=modeIndex<7&&modeIndex%2===0;
+      const scatterScale=Math.max(.2,1-(level-1)*.12);
+      const activeDuration=isScatter?Math.max(modeIndex===0?5:1,modeDurations[modeIndex]*scatterScale):modeDurations[modeIndex];
+      if(modeTime>=activeDuration){modeTime=0;modeIndex=Math.min(modeIndex+1,modeDurations.length-1);for(const g of ghosts)if(g.mode==='active'&&!g.eyes)g.reversePending=true;}
+    }
+    releaseGhosts(dt);
+    const playerTile=tileAt(player.x,player.y), isChewing=dots.has(keyFor(playerTile.c,playerTile.r));
+    const previousX=player.x,previousY=player.y;
+    updateActor(player,dt,'player',speeds.player*(isChewing?.94:1)*(level>1?.98:1));
+    for(const g of ghosts){
+      const levelSpeed=speeds.ghost+(level-1)*.0012;
+      g.currentSpeed=g.name==='blinky'&&g.mode==='active'&&!g.eyes
+        ? levelSpeed+(remaining<10?.025:remaining<20?.012:0):levelSpeed;
+      tickGhost(g,dt);
+    }
+    for(const fruit of fruits){fruit.life-=dt;if(Math.hypot(player.x-fruit.x,player.y-fruit.y)<17){addScore(fruit.value);fruit.life=0;}}
+    fruits=fruits.filter(f=>f.life>0);
+    const playerCell=tileAt(player.x,player.y);
+    for(const g of ghosts){if(g.mode!=='active')continue;const ghostCell=tileAt(g.x,g.y);if(playerCell.c===ghostCell.c&&playerCell.r===ghostCell.r){
+      if(frightened>0&&!g.eyes){
+        const points=200*(2**Math.min(eatChain,3));
+        g.eyes=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
+        ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;ghostFreeze=1;break;
+      }
+      else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;statusEl.textContent='';break;}
+    }}
+    if(state==='playing')consumeDotsAlongPath(previousX,previousY,player.x,player.y);
+  }
+  function drawMaze(){
+    ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+    if(atlas.complete&&atlas.naturalWidth){
+      ctx.imageSmoothingEnabled=false;
+      // The right-hand maze panel is the supplied, unmodified clean level map.
+      ctx.drawImage(atlas,228,0,224,248,0,0,224,248);
+    }
+    for(const [k,kind] of dots){const [c,r]=k.split(',').map(Number),{x,y}=center(c,r);
+      if(kind==='power'){
+        const pulse=.76+.24*Math.sin(elapsed*5);ctx.fillStyle='#ffd4a2';ctx.beginPath();ctx.arc(x,y,2.7*pulse,0,Math.PI*2);ctx.fill();
+      } else {ctx.fillStyle='#ffe7b0';ctx.fillRect(Math.round(x-1),Math.round(y-1),2,2);}
+    }
+    if(level===256){
+      const glyphs='0123456789ABCDEF╳╳';
+      ctx.font='8px ui-monospace,monospace';
+      for(let r=0;r<ROWS;r++)for(let c=14;c<COLS;c++){
+        const seed=(c*17+r*31+c*r*7)%glyphs.length;
+        ctx.fillStyle=['#ff4242','#45f09a','#ffe34d','#c4e4ff'][seed%4];
+        ctx.fillText(glyphs[seed],c*TILE+4,r*TILE+11);
+      }
+    }
+  }
+  function drawPac(){
+    if(state==='dead'){
+      const p=clamp(deathTime/1.15,0,1),radius=8*(1-p);ctx.fillStyle='#ffe500';ctx.beginPath();ctx.arc(player.x,player.y,radius,0,Math.PI*2);ctx.fill();return;
+    }
+    const dir=player.dir||player.want||'left',angle={right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[dir];
+    const moving=state==='playing'&&player.dir!==null,open=moving?(0.1+.26*(.5+.5*Math.sin(elapsed*13))):.06;
+    ctx.fillStyle='#ffe500';ctx.beginPath();ctx.moveTo(player.x,player.y);ctx.arc(player.x,player.y,9.2,angle+open,angle+Math.PI*2-open);ctx.closePath();ctx.fill();
+  }
+  function drawGhost(g){
+    const x=Math.round(g.x),y=Math.round(g.y),blueNow=frightened>0&&!g.eyes,body=g.eyes?'#f1eee5':blueNow?(frightened<2&&Math.floor(elapsed*8)%2?'#f5f1e8':'#2045e8'):colors[g.name];
+    ctx.fillStyle=body;ctx.beginPath();ctx.arc(x,y-1,8.5,Math.PI,0);ctx.lineTo(x+8.5,y+7.5);
+    for(let i=0;i<4;i++){ctx.lineTo(x+4.25-i*4.25,y+(i%2?5:8));}ctx.lineTo(x-8.5,y-1);ctx.closePath();ctx.fill();
+    if(g.eyes){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x-3,y-1,2.5,0,7);ctx.arc(x+3,y-1,2.5,0,7);ctx.fill();ctx.fillStyle='#174bd5';ctx.fillRect(x-3,y-1,2,2);ctx.fillRect(x+3,y-1,2,2);return;}
+    const look=directions[g.dir]||[0,0];ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x-3,y-1,3.2,0,7);ctx.arc(x+3,y-1,3.2,0,7);ctx.fill();ctx.fillStyle='#14234d';ctx.beginPath();ctx.arc(x-3+look[0],y-1+look[1],1.6,0,7);ctx.arc(x+3+look[0],y-1+look[1],1.6,0,7);ctx.fill();
+    if(blueNow&&frightened<2){ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-5,y+5);ctx.lineTo(x-3,y+3);ctx.lineTo(x-1,y+5);ctx.lineTo(x+1,y+3);ctx.lineTo(x+3,y+5);ctx.lineTo(x+5,y+3);ctx.stroke();}
+  }
+  function draw(){
+    syncActors();
+    drawMaze();
+    for(const f of fruits){ctx.fillStyle='#f22';ctx.beginPath();ctx.arc(f.x,f.y,6,0,7);ctx.fill();ctx.fillStyle='#5f3';ctx.fillRect(f.x+1,f.y-9,3,4);}
+    if(state==='clearing'||state==='over'){
+      ctx.fillStyle='#000b';ctx.fillRect(28,113,168,21);ctx.strokeStyle='#274ff5';ctx.strokeRect(28.5,113.5,167,20);
+      ctx.fillStyle=state==='over'?'#ff4858':'#ffe500';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';
+      ctx.fillText(state==='clearing'?'MAZE CLEARED':'GAME OVER',112,126);ctx.textAlign='left';
+    }
+    ctx.fillStyle='#fff';ctx.font='9px ui-monospace,monospace';ctx.fillText(`LEVEL ${level}`,8,12);
+    ctx.textAlign='right';ctx.fillText('♥ '.repeat(Math.max(0,lives)),216,12);ctx.textAlign='left';
+  }
+  function syncActors(){
+    if(!player||!ghosts)return;
+    const imageReady=atlas.complete&&atlas.naturalWidth>0;
+    const imageScale=(screen.getBoundingClientRect().width||canvas.width)/canvas.width;
+    const place=(node,actor,w=18,h=18)=>{
+      node.style.left=`${actor.x/canvas.width*100}%`;
+      node.style.top=`${actor.y/canvas.height*100}%`;
+      node.style.width=`${w/canvas.width*100}%`;
+      node.style.height=`${h/canvas.height*100}%`;
+    };
+    const direction=player.dir||player.want||'left';
+    // The supplied player cels face right by default; rotate them toward travel.
+    const angle={right:0,left:180,down:90,up:270}[direction];
+    const moving=state==='playing'&&player.toX!=null;
+    let pacFrame=state==='dead'?deathPacFrame:(moving?Math.floor(elapsed*10)%3:2);
+    let pacSourceX=456+pacFrame*16,pacSourceY=0,pacSize=16,pacAngle=angle;
+    let deathFold=false,pacOpacity=ghostFreeze>0?0:1;
+    if(state==='dead'){
+      pacOpacity=1;
+      if(deathTime<DEATH_IMPACT){
+        pacSourceX=456+deathPacFrame*16;
+      }else if(deathTime<DEATH_IMPACT+DEATH_FOLD){
+        deathFold=true;pacSourceX=488;pacAngle=0;
+        const progress=clamp((deathTime-DEATH_IMPACT)/DEATH_FOLD,0,1);
+        pacMarker.style.setProperty('--death-gap',`${28+progress*330}deg`);
+      }else if(deathTime<DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK){
+        pacSourceX=664;pacAngle=0;
+        const progress=(deathTime-DEATH_IMPACT-DEATH_FOLD)/DEATH_SPARK;
+        pacSize=16+progress*4;
+      }else{
+        pacOpacity=0;
+      }
+    }
+    place(pacMarker,player,pacSize,pacSize);
+    pacMarker.classList.toggle('sprite',imageReady);
+    pacMarker.classList.toggle('dead-fold',deathFold);
+    pacMarker.style.setProperty('--death-opacity',String(pacOpacity));
+    pacMarker.style.opacity=String(pacOpacity);
+    pacMarker.style.setProperty('--facing',`${pacAngle}deg`);
+    pacMarker.style.setProperty('--mouth-angle',`${pacAngle}deg`);
+    if(imageReady){
+      const spriteScale=imageScale*(pacSize/16);
+      if(pacMarker.dataset.spriteReady!=='true'){
+        pacMarker.style.backgroundImage=sheetImage;
+        pacMarker.dataset.spriteReady='true';
+      }
+      pacMarker.style.backgroundSize=`${680*spriteScale}px ${248*spriteScale}px`;
+      pacMarker.style.backgroundPosition=`-${pacSourceX*spriteScale}px -${pacSourceY*spriteScale}px`;
+    }else pacMarker.style.backgroundImage='';
+    pacMarker.classList.toggle('dead',state==='dead');
+    ghostMarkers.forEach((node,index)=>{
+      const ghost=ghosts[index];if(!ghost)return;
+      place(node,ghost,16,16);
+      node.classList.toggle('frightened',frightened>0&&!ghost.eyes);
+      node.classList.toggle('eyes',ghost.eyes);
+      node.classList.toggle('sprite',imageReady&&!ghost.eyes);
+      if(imageReady&&!ghost.eyes){
+        const frame=state==='dead'||ghostFreeze>0?0:Math.floor(elapsed*7)%2;
+        const sourceX=frightened>0?584+frame*16:456+frame*16;
+        const sourceY=frightened>0?64:64+index*16;
+        const spriteScale=imageScale;
+        if(node.dataset.spriteReady!=='true'||!node.style.backgroundImage){
+          node.style.backgroundImage=sheetImage;
+          node.dataset.spriteReady='true';
+        }
+        node.style.backgroundSize=`${680*spriteScale}px ${248*spriteScale}px`;
+        node.style.backgroundPosition=`-${sourceX*spriteScale}px -${sourceY*spriteScale}px`;
+      }else node.style.backgroundImage='';
+      const look=directions[ghost.dir]||[0,0];
+      node.style.setProperty('--eye-x',`${look[0]*imageScale}px`);
+      node.style.setProperty('--eye-y',`${look[1]*imageScale}px`);
+      const hiddenByDeath=state==='dead'&&deathTime>=DEATH_IMPACT;
+      node.style.opacity=hiddenByDeath||(ghostFreeze>0&&ghost.eyes)?'0':'1';
+    });
+    const showingPoints=ghostFreeze>0&&ghostEatScore>0;
+    if(pointsMarker){
+      place(pointsMarker,{x:ghostEatX,y:ghostEatY},32,14);
+      pointsMarker.textContent=String(ghostEatScore);
+      pointsMarker.style.opacity=showingPoints?'1':'0';
+    }
+  }
+  function fitCanvas(){
+    const touchControls=matchMedia('(pointer: coarse)').matches?150:0;
+    const viewportWidth=window.innerWidth||720,viewportHeight=window.innerHeight||800;
+    const availableWidth=Math.max(1,Math.min(viewportWidth-32,560));
+    const availableHeight=viewportHeight>400?Math.max(300,viewportHeight-200-touchControls):620;
+    const width=Math.min(availableWidth,availableHeight*28/31,560);
+    const height=width*31/28;
+    screen.style.width=`${width}px`;
+    screen.style.height=`${height}px`;
+    canvas.style.width=`${width}px`;
+    canvas.style.height=`${height}px`;
+  }
+  function setDirection(d){
+    if(!directions[d]||state==='ready'||state==='dead'||state==='paused'||state==='clearing'||ghostFreeze>0)return;
+    if(state==='over'){startGame(true);return;}
+    player.want=d;
+    if(player.dir&&d===opposite[player.dir]){
+      if(player.toX!=null){const oldToX=player.toX,oldToY=player.toY;player.toX=player.fromX;player.toY=player.fromY;player.fromX=oldToX;player.fromY=oldToY;}
+      player.dir=d;
+    }
+  }
+  function startGame(reset=false){
+    if(state==='over'||reset){score=0;lives=3;level=1;extraLife=false;initializeMaze();dotCount=0;fruits=[];resetRound(true);updateHUD();}
+    state='ready';readyTime=0;elapsed=0;statusEl.textContent='READY';syncActors();
+  }
+  addEventListener('keydown',e=>{
+    const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
+    if(map[e.code]){e.preventDefault();setDirection(map[e.code]);}
+    if(e.code==='Space'){e.preventDefault();if(state==='playing'){state='paused';statusEl.textContent='PAUSED';}else if(state==='paused'){state='playing';statusEl.textContent='';}}
+  });
+  addEventListener('keyup',e=>{
+    const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
+    if(state==='playing'&&ghostFreeze===0&&map[e.code]&&player?.want===map[e.code])player.want=null;
+  });
+  document.querySelectorAll('[data-dir]').forEach(b=>{
+    const d=b.dataset.dir;
+    b.addEventListener('pointerdown',e=>{e.preventDefault();setDirection(d);});
+    const release=()=>{if(state==='playing'&&ghostFreeze===0&&player?.want===d)player.want=null;};
+    b.addEventListener('pointerup',release);b.addEventListener('pointercancel',release);b.addEventListener('pointerleave',release);
+  });
+  window.addEventListener('resize',fitCanvas,{passive:true});
+  fitCanvas();
+  function frame(t){const dt=Math.min(.04,(t-lastTime)/1000||0);lastTime=t;update(dt);draw();requestAnimationFrame(frame);}
+  initializeMaze();resetRound(true);state='ready';updateHUD();syncActors();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
