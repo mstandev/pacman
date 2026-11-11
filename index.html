@@ -12,6 +12,7 @@
     .cabinet { width: min(100%, 760px); }
     .topline { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin: 0 auto 10px; max-width: 560px; }
     .brand { color: #ffe500; font-weight: 900; letter-spacing: .18em; font-size: clamp(20px, 4vw, 28px); text-shadow: 0 0 18px #ffe50055; }
+    .brand { display: block; flex: 0 0 183px; width: 183px; height: 49px; background: url("pacman-sprites-new.png") 0 0 / 677px 274px no-repeat; color: transparent; font-size: 0; text-shadow: none; }
     .edition { color: #7786aa; text-transform: uppercase; font-size: 10px; letter-spacing: .17em; text-align: right; }
     .screen { position: relative; display: flex; justify-content: center; margin: auto; width: min(100%, 560px); aspect-ratio: 28 / 31; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     canvas { display: block; width: auto; height: auto; max-width: 100%; aspect-ratio: 28 / 31; margin: auto; image-rendering: pixelated; background: #000; }
@@ -39,6 +40,8 @@
     .points-marker { width: 32px; min-height: 14px; color: #fff; font: 700 8px ui-monospace, monospace; line-height: 14px; text-align: center; text-shadow: 0 0 4px #fff; white-space: nowrap; }
     .stats { width: min(100%, 560px); margin: 12px auto 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: #aeb8d0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
     .stat-value { display: block; margin-top: 5px; color: #fff; font-size: 18px; letter-spacing: .02em; }
+    canvas.stat-value { width: 72px; height: 16px; max-width: none; aspect-ratio: auto; margin: 5px 0 0; background: transparent; image-rendering: pixelated; }
+    .stat:last-child canvas.stat-value { margin-left: auto; }
     .stat:nth-child(2) { text-align: center; }
     .stat:last-child { text-align: right; }
     .status { color: #ffe500; font-size: 11px; letter-spacing: .13em; text-align: center; min-height: 22px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
@@ -58,7 +61,7 @@
 </head>
 <body>
   <main class="cabinet">
-    <header class="topline"><div class="brand">PAC—MAN</div><div class="edition level-lives" id="level-lives">LEVEL 1 · ♥♥♥</div></header>
+    <header class="topline"><div class="brand" role="img" aria-label="Pac-Man"></div><div class="edition level-lives" id="level-lives">LEVEL 1 · ♥♥♥</div></header>
     <div class="screen">
       <canvas id="game" width="224" height="248" aria-label="Pac-Man arcade game"></canvas>
       <div class="actor-layer" aria-hidden="true">
@@ -72,9 +75,9 @@
       <canvas class="wall-overlay" id="wall-overlay" width="224" height="248" aria-hidden="true"></canvas>
     </div>
     <section class="stats" aria-live="polite">
-      <div class="stat">Score<span class="stat-value" id="score">000000</span></div>
+      <div class="stat">Score<canvas class="stat-value" id="score" width="48" height="8" role="img" aria-label="Score 000000"></canvas></div>
       <div class="status" id="status"><span id="status-message">READY</span></div>
-      <div class="stat">Best<span class="stat-value" id="best">000000</span></div>
+      <div class="stat">Best<canvas class="stat-value" id="best" width="48" height="8" role="img" aria-label="Best 000000"></canvas></div>
     </section>
     <div class="touch" aria-label="Touch controls"><button class="up" data-dir="up" aria-label="Up">▲</button><button class="left" data-dir="left" aria-label="Left">◀</button><button class="down" data-dir="down" aria-label="Down">▼</button><button class="right" data-dir="right" aria-label="Right">▶</button></div>
   </main>
@@ -89,6 +92,29 @@
   const ghostMarkers = [...document.querySelectorAll('.ghost-marker')];
   const pointsMarker = document.querySelector('#points-marker');
   const atlas = new Image();
+  const uiAtlas = new Image();
+  const uiFrames = {
+    ready: { x:419, y:30, w:41, h:7 },
+    gameOver: { x:419, y:39, w:71, h:7 },
+    digits: Array.from({length:10},(_,digit)=>({x:419+digit*8,y:0,w:8,h:8})),
+    fruits: Array.from({length:8},(_,fruit)=>({x:507+fruit*17,y:127,w:16,h:16}))
+  };
+  const uiFrameCanvases = new Map();
+  function uiFrame(frame){
+    const key=`${frame.x},${frame.y},${frame.w},${frame.h}`;
+    if(uiFrameCanvases.has(key))return uiFrameCanvases.get(key);
+    if(!uiAtlas.complete||!uiAtlas.naturalWidth)return null;
+    const crop=document.createElement('canvas');crop.width=frame.w;crop.height=frame.h;
+    const cropCtx=crop.getContext('2d',{willReadFrequently:true});
+    cropCtx.drawImage(uiAtlas,frame.x,frame.y,frame.w,frame.h,0,0,frame.w,frame.h);
+    const pixels=cropCtx.getImageData(0,0,frame.w,frame.h);
+    for(let p=0;p<pixels.data.length;p+=4){
+      if(pixels.data[p]<36&&pixels.data[p+1]<36&&pixels.data[p+2]<36)pixels.data[p+3]=0;
+    }
+    cropCtx.putImageData(pixels,0,0);uiFrameCanvases.set(key,crop);return crop;
+  }
+  uiAtlas.onload=()=>{updateHUD();setStatus(statusEl.getAttribute('aria-label')||statusEl.textContent||'');};
+  uiAtlas.src='pacman-sprites-new.png';
   const wallPixels = new Uint8Array(canvas.width * canvas.height);
   let pacSpriteOffsets = [];
   let wallMaskReady = false;
@@ -370,7 +396,6 @@
   const modeDurations = [7,20,7,20,5,20,5,Infinity];
   const speeds = { player:.105, ghost:.092, frightened:.064, tunnel:.065 };
   const scoreEl=document.querySelector('#score'), bestEl=document.querySelector('#best'), statusEl=document.querySelector('#status-message'), levelLivesEl=document.querySelector('#level-lives');
-  bestEl.textContent=String(best).padStart(6,'0');
   const keyFor=(c,r)=>`${c},${r}`;
   const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
   function initializeMaze(){
@@ -390,7 +415,26 @@
     if(!keepDots){ initializeMaze(); dotCount=0; fruits=[]; }
   }
   resetRound(true);
-  function updateHUD(){ scoreEl.textContent=String(score).padStart(6,'0'); bestEl.textContent=String(best).padStart(6,'0'); levelLivesEl.textContent=`LEVEL ${level} · ${'♥'.repeat(Math.max(0,lives))}`; }
+  function drawScoreDigits(target,value,label){
+    const digits=String(value).padStart(6,'0').slice(-6),digitCtx=target.getContext('2d');
+    digitCtx.clearRect(0,0,target.width,target.height);
+    if(uiAtlas.complete&&uiAtlas.naturalWidth){
+      for(let i=0;i<digits.length;i++){
+        const frame=uiFrames.digits[Number(digits[i])],sprite=uiFrame(frame);
+        if(sprite)digitCtx.drawImage(sprite,i*8,0,8,8);
+      }
+    }
+    target.setAttribute('aria-label',`${label} ${digits}`);
+  }
+  function updateHUD(){ drawScoreDigits(scoreEl,score,'Score');drawScoreDigits(bestEl,best,'Best');levelLivesEl.textContent=`LEVEL ${level} · ${'♥'.repeat(Math.max(0,lives))}`; }
+  function setStatus(message){
+    statusEl.style.backgroundImage='';statusEl.style.backgroundSize='';statusEl.style.width='';statusEl.style.height='';
+    statusEl.textContent=message;statusEl.setAttribute('aria-label',message);
+    const frame=message==='READY'?uiFrames.ready:message==='GAME OVER'?uiFrames.gameOver:null;
+    const sprite=frame&&uiFrame(frame);
+    if(sprite){statusEl.textContent='';statusEl.style.display='inline-block';statusEl.style.width=`${frame.w}px`;statusEl.style.height=`${frame.h}px`;statusEl.style.backgroundImage=`url("${sprite.toDataURL()}")`;statusEl.style.backgroundSize=`${frame.w}px ${frame.h}px`;statusEl.style.imageRendering='pixelated';}
+    else statusEl.style.display='';
+  }
   function addScore(points){ score+=points; if(score>best){best=score;saveBest(best);} if(!extraLife&&score>=10000){lives++;extraLife=true;} updateHUD(); }
   function tileAt(x,y){return {c:Math.floor(x/TILE),r:Math.floor(y/TILE)};}
   function walkable(c,r,actor){
@@ -614,7 +658,7 @@
       for(const g of ghosts)if(g.mode==='active'&&!g.eyes)g.reversePending=true;
     }
     else addScore(10);
-    if(dotCount===70||dotCount===170)fruits.push({x:center(13,17).x,y:center(13,17).y,life:9,value:level===1?100:level<4?300:500});
+    if(dotCount===70||dotCount===170){const fruit=Math.min(Math.max(level-1,0),7),values=[100,300,500,700,1000,2000,3000,5000],position=center(11,23);fruits.push({x:position.x,y:position.y,life:9,value:values[fruit],sprite:fruit});}
     if(remaining<=0&&level<256){state='clearing';clearTime=0;player.dir=null;}
   }
   function consumeDotsAlongPath(x0,y0,x1,y1){
@@ -629,7 +673,7 @@
   function update(dt){
     if(state==='ready'){
       readyTime+=dt;
-      if(readyTime>=1.2){state='playing';player.dir='left';player.want=null;statusEl.textContent='';}
+      if(readyTime>=1.2){state='playing';player.dir='left';player.want=null;setStatus('');}
       return;
     }
     if(state==='paused')return;
@@ -638,14 +682,14 @@
       if(deathTime>=DEATH_IMPACT)fruits=[];
       if(deathTime>=DEATH_TOTAL){
         lives--;
-        if(lives>0){resetRound(true);state='ready';readyTime=0;statusEl.textContent='READY';}
-        else{state='over';statusEl.textContent='GAME OVER';}
+        if(lives>0){resetRound(true);state='ready';readyTime=0;setStatus('READY');}
+        else{state='over';setStatus('GAME OVER');}
       }
       return;
     }
     if(ghostFreeze>0){ghostFreeze=Math.max(0,ghostFreeze-dt);if(ghostFreeze===0)ghostEatScore=0;return;}
     if(state==='clearing'){
-      clearTime+=dt;if(clearTime>1.8){level++;resetRound(false);state='ready';readyTime=0;statusEl.textContent='READY';}return;
+      clearTime+=dt;if(clearTime>1.8){level++;resetRound(false);state='ready';readyTime=0;setStatus('READY');updateHUD();}return;
     }
     if(state!=='playing')return;
     elapsed+=dt;
@@ -676,7 +720,7 @@
         g.eyes=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
         ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;ghostFreeze=1;break;
       }
-      else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;statusEl.textContent='';break;}
+      else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;setStatus('');break;}
     }}
     if(state==='playing')consumeDotsAlongPath(previousX,previousY,player.x,player.y);
   }
@@ -721,11 +765,14 @@
   function draw(){
     syncActors();
     drawMaze();
-    for(const f of fruits){ctx.fillStyle='#f22';ctx.beginPath();ctx.arc(f.x,f.y,6,0,7);ctx.fill();ctx.fillStyle='#5f3';ctx.fillRect(f.x+1,f.y-9,3,4);}
+    for(const f of fruits){const sprite=uiFrame(uiFrames.fruits[f.sprite]);if(sprite)ctx.drawImage(sprite,f.x-8,f.y-8,16,16);else{ctx.fillStyle='#f22';ctx.beginPath();ctx.arc(f.x,f.y,6,0,7);ctx.fill();ctx.fillStyle='#5f3';ctx.fillRect(f.x+1,f.y-9,3,4);}}
     if(state==='clearing'||state==='over'){
       ctx.fillStyle='#000b';ctx.fillRect(28,113,168,21);ctx.strokeStyle='#274ff5';ctx.strokeRect(28.5,113.5,167,20);
-      ctx.fillStyle=state==='over'?'#ff4858':'#ffe500';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';
-      ctx.fillText(state==='clearing'?'MAZE CLEARED':'GAME OVER',112,126);ctx.textAlign='left';
+      if(state==='over'){
+        const gameOver=uiFrame(uiFrames.gameOver);
+        if(gameOver)ctx.drawImage(gameOver,(canvas.width-uiFrames.gameOver.w)/2,120);
+        else{ctx.fillStyle='#ff4858';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';ctx.fillText('GAME OVER',112,126);ctx.textAlign='left';}
+      }else{ctx.fillStyle='#ffe500';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';ctx.fillText('MAZE CLEARED',112,126);ctx.textAlign='left';}
     }
   }
   function syncActors(){
@@ -832,12 +879,12 @@
   }
   function startGame(reset=false){
     if(state==='over'||reset){score=0;lives=3;level=1;extraLife=false;initializeMaze();dotCount=0;fruits=[];resetRound(true);updateHUD();}
-    state='ready';readyTime=0;elapsed=0;statusEl.textContent='READY';syncActors();
+    state='ready';readyTime=0;elapsed=0;setStatus('READY');syncActors();
   }
   addEventListener('keydown',e=>{
     const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
     if(map[e.code]){e.preventDefault();setDirection(map[e.code]);}
-    if(e.code==='Space'){e.preventDefault();if(state==='playing'){state='paused';statusEl.textContent='PAUSED';}else if(state==='paused'){state='playing';statusEl.textContent='';}}
+    if(e.code==='Space'){e.preventDefault();if(state==='playing'){state='paused';setStatus('PAUSED');}else if(state==='paused'){state='playing';setStatus('');}}
   });
   addEventListener('keyup',e=>{
     const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
