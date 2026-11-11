@@ -41,7 +41,8 @@
     .stat-value { display: block; margin-top: 5px; color: #fff; font-size: 18px; letter-spacing: .02em; }
     .stat:nth-child(2) { text-align: center; }
     .stat:last-child { text-align: right; }
-    .status { color: #ffe500; font-size: 11px; letter-spacing: .13em; text-align: center; min-height: 15px; }
+    .status { color: #ffe500; font-size: 11px; letter-spacing: .13em; text-align: center; min-height: 22px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+    .level-lives { color: #8490aa; font-size: 9px; letter-spacing: .08em; line-height: 1; white-space: nowrap; }
     .bottom { width: min(100%, 560px); margin: 12px auto 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .help { color: #8490aa; font: 11px/1.65 system-ui, sans-serif; }
     kbd { color: #dce4f7; border: 1px solid #354264; border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; font: 10px ui-monospace, monospace; }
@@ -72,7 +73,7 @@
     </div>
     <section class="stats" aria-live="polite">
       <div class="stat">Score<span class="stat-value" id="score">000000</span></div>
-      <div class="status" id="status">READY</div>
+      <div class="status" id="status"><span id="status-message">READY</span><span class="level-lives" id="level-lives">LEVEL 1 · ♥♥♥</span></div>
       <div class="stat">Best<span class="stat-value" id="best">000000</span></div>
     </section>
     <div class="touch" aria-label="Touch controls"><button class="up" data-dir="up" aria-label="Up">▲</button><button class="left" data-dir="left" aria-label="Left">◀</button><button class="down" data-dir="down" aria-label="Down">▼</button><button class="right" data-dir="right" aria-label="Right">▶</button></div>
@@ -368,7 +369,7 @@
   const DEATH_TOTAL=DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK+DEATH_EMPTY;
   const modeDurations = [7,20,7,20,5,20,5,Infinity];
   const speeds = { player:.105, ghost:.092, frightened:.064, tunnel:.065 };
-  const scoreEl=document.querySelector('#score'), bestEl=document.querySelector('#best'), statusEl=document.querySelector('#status');
+  const scoreEl=document.querySelector('#score'), bestEl=document.querySelector('#best'), statusEl=document.querySelector('#status-message'), levelLivesEl=document.querySelector('#level-lives');
   bestEl.textContent=String(best).padStart(6,'0');
   const keyFor=(c,r)=>`${c},${r}`;
   const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
@@ -389,7 +390,7 @@
     if(!keepDots){ initializeMaze(); dotCount=0; fruits=[]; }
   }
   resetRound(true);
-  function updateHUD(){ scoreEl.textContent=String(score).padStart(6,'0'); bestEl.textContent=String(best).padStart(6,'0'); }
+  function updateHUD(){ scoreEl.textContent=String(score).padStart(6,'0'); bestEl.textContent=String(best).padStart(6,'0'); levelLivesEl.textContent=`LEVEL ${level} · ${'♥'.repeat(Math.max(0,lives))}`; }
   function addScore(points){ score+=points; if(score>best){best=score;saveBest(best);} if(!extraLife&&score>=10000){lives++;extraLife=true;} updateHUD(); }
   function tileAt(x,y){return {c:Math.floor(x/TILE),r:Math.floor(y/TILE)};}
   function walkable(c,r,actor){
@@ -726,8 +727,6 @@
       ctx.fillStyle=state==='over'?'#ff4858':'#ffe500';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';
       ctx.fillText(state==='clearing'?'MAZE CLEARED':'GAME OVER',112,126);ctx.textAlign='left';
     }
-    ctx.fillStyle='#fff';ctx.font='9px ui-monospace,monospace';ctx.fillText(`LEVEL ${level}`,8,12);
-    ctx.textAlign='right';ctx.fillText('♥ '.repeat(Math.max(0,lives)),216,12);ctx.textAlign='left';
   }
   function syncActors(){
     if(!player||!ghosts)return;
