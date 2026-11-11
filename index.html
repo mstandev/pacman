@@ -109,7 +109,7 @@
     cropCtx.drawImage(uiAtlas,frame.x,frame.y,frame.w,frame.h,0,0,frame.w,frame.h);
     const pixels=cropCtx.getImageData(0,0,frame.w,frame.h);
     for(let p=0;p<pixels.data.length;p+=4){
-      if(pixels.data[p]<36&&pixels.data[p+1]<36&&pixels.data[p+2]<36)pixels.data[p+3]=0;
+      if(pixels.data[p]<70&&pixels.data[p+1]<70&&pixels.data[p+2]<70)pixels.data[p+3]=0;
     }
     cropCtx.putImageData(pixels,0,0);uiFrameCanvases.set(key,crop);return crop;
   }
