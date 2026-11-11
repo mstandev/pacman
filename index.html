@@ -58,7 +58,7 @@
 </head>
 <body>
   <main class="cabinet">
-    <header class="topline"><div class="brand">PAC—MAN</div><div class="edition">Maze chase · 1980<br>One player</div></header>
+    <header class="topline"><div class="brand">PAC—MAN</div><div class="edition level-lives" id="level-lives">LEVEL 1 · ♥♥♥</div></header>
     <div class="screen">
       <canvas id="game" width="224" height="248" aria-label="Pac-Man arcade game"></canvas>
       <div class="actor-layer" aria-hidden="true">
@@ -73,7 +73,7 @@
     </div>
     <section class="stats" aria-live="polite">
       <div class="stat">Score<span class="stat-value" id="score">000000</span></div>
-      <div class="status" id="status"><span id="status-message">READY</span><span class="level-lives" id="level-lives">LEVEL 1 · ♥♥♥</span></div>
+      <div class="status" id="status"><span id="status-message">READY</span></div>
       <div class="stat">Best<span class="stat-value" id="best">000000</span></div>
     </section>
     <div class="touch" aria-label="Touch controls"><button class="up" data-dir="up" aria-label="Up">▲</button><button class="left" data-dir="left" aria-label="Left">◀</button><button class="down" data-dir="down" aria-label="Down">▼</button><button class="right" data-dir="right" aria-label="Right">▶</button></div>
