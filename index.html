@@ -517,21 +517,30 @@
     }
     return null;
   }
-  function tryPlayerCornerCut(actor){
-    if(!actor.want||actor.toX==null)return;
-    const [mx,my]=directions[actor.dir],[tx,ty]=directions[actor.want];
-    if(mx*tx+my*ty!==0)return;
-    const remain=Math.abs(actor.toX-actor.x)+Math.abs(actor.toY-actor.y);
-    if(remain>4.5)return;
-    const c=Math.round((actor.toX-HALF)/TILE),r=Math.round((actor.toY-HALF)/TILE);
-    if(!canStep('player',c,r,actor.want))return;
-    const endX=actor.toX+tx*5,endY=actor.toY+ty*5;
-    const distance=Math.hypot(endX-actor.x,endY-actor.y),samples=Math.ceil(distance/.5);
-    for(let i=0;i<=samples;i++){
-      const t=i/samples;
-      if(spriteHitsWall(actor.x+(endX-actor.x)*t,actor.y+(endY-actor.y)*t,actor.want))return;
+  function updatePlayerActor(dt,speed){
+    player.anim=(player.anim||0)+dt;
+    let distance=speed*dt*60*TILE,guard=0;
+    const path=[];
+    while(distance>1e-6&&guard++<8){
+      if(player.toX==null){
+        const c=Math.round((player.x-HALF)/TILE),r=Math.round((player.y-HALF)/TILE),p=center(c,r);
+        player.x=p.x;player.y=p.y;
+        const nextDir=choosePlayerDir(c,r);
+        if(nextDir)player.dir=nextDir;
+        if(!player.dir||!canStep('player',c,r,player.dir))break;
+        const [mx,my]=directions[player.dir];
+        player.fromX=p.x;player.fromY=p.y;
+        player.toX=(c+mx)*TILE+HALF;player.toY=(r+my)*TILE+HALF;
+      }
+      const dx=player.toX-player.x,dy=player.toY-player.y,remaining=Math.hypot(dx,dy);
+      if(remaining<1e-6){player.x=player.toX;player.y=player.toY;player.toX=null;player.toY=null;continue;}
+      const moved=Math.min(distance,remaining),x0=player.x,y0=player.y;
+      player.x+=dx/remaining*moved;player.y+=dy/remaining*moved;
+      path.push([x0,y0,player.x,player.y]);
+      distance-=moved;
+      if(moved>=remaining-1e-6){player.x=player.toX;player.y=player.toY;player.toX=null;player.toY=null;}
     }
-    actor.dir=actor.want;actor.want=null;actor.toX=endX;actor.toY=endY;
+    return path;
   }
   function updateActor(actor,dt,actorType,speed){
     actor.anim=(actor.anim||0)+dt;
@@ -551,7 +560,6 @@
       actor.toX=(c+dx)*TILE+HALF;actor.toY=(r+dy)*TILE+HALF;
     }
     const mult=(actorType==='ghost'&&frightened>0&&!actor.eyes)?0.66:1;
-    if(actorType==='player')tryPlayerCornerCut(actor);
     const step=speed*dt*60*mult*TILE;
     const dx=actor.toX-actor.x,dy=actor.toY-actor.y,dist=Math.hypot(dx,dy);
     if(step>=dist){
@@ -718,8 +726,8 @@
     }
     releaseGhosts(dt);
     const playerTile=tileAt(player.x,player.y), isChewing=dots.has(keyFor(playerTile.c,playerTile.r));
-    const previousX=player.x,previousY=player.y;
-    updateActor(player,dt,'player',speeds.player*(isChewing?.94:1)*(level>1?.98:1));
+    const playerPath=updatePlayerActor(dt,speeds.player*(isChewing?.94:1)*(level>1?.98:1));
+    for(const segment of playerPath){consumeDotsAlongPath(...segment);if(state!=='playing')break;}
     for(const g of ghosts){
       const levelSpeed=speeds.ghost+(level-1)*.0012;
       g.currentSpeed=g.name==='blinky'&&g.mode==='active'&&!g.eyes
@@ -737,7 +745,6 @@
       }
       else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;setStatus('');break;}
     }}
-    if(state==='playing')consumeDotsAlongPath(previousX,previousY,player.x,player.y);
   }
   function drawMaze(){
     ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
