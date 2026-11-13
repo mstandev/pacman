@@ -493,9 +493,28 @@
   }
   function choosePlayerDir(c,r){
     const open=directionOrder.filter(dir=>canStep('player',c,r,dir));
-    // A held joystick wish wins when it is legal; otherwise keep the current heading.
-    if(player.want&&open.includes(player.want))return player.want;
+    // Preserve a turn tap until it becomes legal, then consume the request.
+    if(player.want&&open.includes(player.want)){
+      const requested=player.want;
+      player.want=null;
+      return requested;
+    }
     if(player.dir&&open.includes(player.dir))return player.dir;
+    // At a blocked corridor, continue through an open 90-degree turn only.
+    if(player.dir){
+      const [dx,dy]=directions[player.dir];
+      const turns=open.filter(dir=>{
+        const [tx,ty]=directions[dir];
+        return dx*tx+dy*ty===0;
+      });
+      if(turns.length){
+        const pelletTurns=turns.filter(dir=>{
+          const [tx,ty]=directions[dir];
+          return dots.has(keyFor(c+tx,r+ty));
+        });
+        return (pelletTurns.length?pelletTurns:turns)[0];
+      }
+    }
     return null;
   }
   function tryPlayerCornerCut(actor){
@@ -512,7 +531,7 @@
       const t=i/samples;
       if(spriteHitsWall(actor.x+(endX-actor.x)*t,actor.y+(endY-actor.y)*t,actor.want))return;
     }
-    actor.dir=actor.want;actor.toX=endX;actor.toY=endY;
+    actor.dir=actor.want;actor.want=null;actor.toX=endX;actor.toY=endY;
   }
   function updateActor(actor,dt,actorType,speed){
     actor.anim=(actor.anim||0)+dt;
@@ -671,11 +690,7 @@
     }
   }
   function update(dt){
-    if(state==='ready'){
-      readyTime+=dt;
-      if(readyTime>=1.2){state='playing';player.dir='left';player.want=null;setStatus('');}
-      return;
-    }
+    if(state==='ready')return;
     if(state==='paused')return;
     if(state==='dead'){
       deathTime+=dt;
@@ -869,8 +884,12 @@
     canvas.style.height=`${height}px`;
   }
   function setDirection(d){
-    if(!directions[d]||state==='ready'||state==='dead'||state==='paused'||state==='clearing'||ghostFreeze>0)return;
-    if(state==='over'){startGame(true);return;}
+    if(!directions[d]||state==='dead'||state==='paused'||state==='clearing'||ghostFreeze>0)return;
+    if(state==='over')startGame(true);
+    if(state==='ready'){
+      player.dir=d;player.want=null;state='playing';readyTime=0;elapsed=0;setStatus('');
+      return;
+    }
     player.want=d;
     if(player.dir&&d===opposite[player.dir]){
       if(player.toX!=null){const oldToX=player.toX,oldToY=player.toY;player.toX=player.fromX;player.toY=player.fromY;player.fromX=oldToX;player.fromY=oldToY;}
@@ -886,15 +905,9 @@
     if(map[e.code]){e.preventDefault();setDirection(map[e.code]);}
     if(e.code==='Space'){e.preventDefault();if(state==='playing'){state='paused';setStatus('PAUSED');}else if(state==='paused'){state='playing';setStatus('');}}
   });
-  addEventListener('keyup',e=>{
-    const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
-    if(state==='playing'&&ghostFreeze===0&&map[e.code]&&player?.want===map[e.code])player.want=null;
-  });
   document.querySelectorAll('[data-dir]').forEach(b=>{
     const d=b.dataset.dir;
     b.addEventListener('pointerdown',e=>{e.preventDefault();setDirection(d);});
-    const release=()=>{if(state==='playing'&&ghostFreeze===0&&player?.want===d)player.want=null;};
-    b.addEventListener('pointerup',release);b.addEventListener('pointercancel',release);b.addEventListener('pointerleave',release);
   });
   window.addEventListener('resize',fitCanvas,{passive:true});
   fitCanvas();
