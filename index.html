@@ -36,7 +36,8 @@
     .ghost-marker.eyes { background: transparent; clip-path: none; }
     .ghost-marker.eyes .eye { display: block; }
     .pacman-marker.dead-fold { background-color: #ffe500; background-image: none !important; border-radius: 50%; mix-blend-mode: screen; -webkit-mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); }
-    .points-marker { width: 32px; min-height: 14px; color: #fff; font: 700 8px ui-monospace, monospace; line-height: 14px; text-align: center; text-shadow: 0 0 4px #fff; white-space: nowrap; }
+    .points-marker { width: 32px; min-height: 14px; color: #fff; font: 700 8px ui-monospace, monospace; line-height: 14px; text-align: center; text-shadow: 0 0 4px #fff; white-space: nowrap; pointer-events: none; z-index: 4; }
+    .points-marker.sprite { color: transparent; text-shadow: none; background-repeat: no-repeat; mix-blend-mode: screen; }
     .stats { width: min(100%, 560px); margin: 12px auto 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: #aeb8d0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
     .stat-value { display: block; margin-top: 5px; color: #fff; font-size: 18px; letter-spacing: .02em; }
     .stat:nth-child(2) { text-align: center; }
@@ -67,13 +68,13 @@
         <div class="actor-marker ghost-marker" data-ghost="pinky" style="--ghost-color:#ff9cce"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
         <div class="actor-marker ghost-marker" data-ghost="inky" style="--ghost-color:#20dafa"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
         <div class="actor-marker ghost-marker" data-ghost="clyde" style="--ghost-color:#ff9b21"><span class="eye"><i></i></span><span class="eye"><i></i></span></div>
-        <div class="actor-marker points-marker" id="points-marker"></div>
       </div>
       <canvas class="wall-overlay" id="wall-overlay" width="224" height="248" aria-hidden="true"></canvas>
+      <div class="actor-marker points-marker" id="points-marker"></div>
     </div>
     <section class="stats" aria-live="polite">
       <div class="stat">Score<span class="stat-value" id="score">000000</span></div>
-      <div class="status" id="status"><span id="status-message">READY</span></div>
+      <div class="status" id="status"><span id="status-message"></span></div>
       <div class="stat">Best<span class="stat-value" id="best">000000</span></div>
     </section>
     <div class="touch" aria-label="Touch controls"><button class="up" data-dir="up" aria-label="Up">▲</button><button class="left" data-dir="left" aria-label="Left">◀</button><button class="down" data-dir="down" aria-label="Down">▼</button><button class="right" data-dir="right" aria-label="Right">▶</button></div>
@@ -363,12 +364,18 @@
   let dots = new Map(), totalDots = 0, remaining = 0;
   function readBest(){try{return Number(window.localStorage.getItem('pacman-best')||0);}catch{return 0;}}
   function saveBest(value){try{window.localStorage.setItem('pacman-best',String(value));}catch{}}
-  let player, ghosts, fruits=[], score=0, best=readBest(), lives=3, level=1;
+  let player, ghosts, fruits=[], scorePopup=null, score=0, best=readBest(), lives=3, level=1;
   let state='ready', lastTime=0, elapsed=0, modeIndex=0, modeTime=0, frightened=0, eatChain=0, dotCount=0, deathTime=0, deathPacFrame=2, clearTime=0, releaseTime=0, released=0, readyTime=0, ghostFreeze=0, ghostEatScore=0, ghostEatX=0, ghostEatY=0, extraLife=false;
   const DEATH_IMPACT=1, DEATH_FOLD=1.2, DEATH_SPARK=.22, DEATH_EMPTY=.35;
   const DEATH_TOTAL=DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK+DEATH_EMPTY;
   const modeDurations = [7,20,7,20,5,20,5,Infinity];
   const speeds = { player:.105, ghost:.092, frightened:.064, tunnel:.065 };
+  const fruitValues=[100,300,500,700,1000,2000,3000,5000];
+  const scoreFrames={
+    100:{x:456,y:144,w:16},300:{x:472,y:144,w:16},500:{x:488,y:144,w:16},700:{x:504,y:144,w:16},
+    1000:{x:520,y:144,w:20},2000:{x:518,y:160,w:20},3000:{x:518,y:176,w:20},5000:{x:518,y:192,w:20},
+    200:{x:456,y:128,w:16},400:{x:472,y:128,w:16},800:{x:488,y:128,w:16},1600:{x:504,y:128,w:16}
+  };
   const scoreEl=document.querySelector('#score'), bestEl=document.querySelector('#best'), statusEl=document.querySelector('#status-message'), levelLivesEl=document.querySelector('#level-lives');
   bestEl.textContent=String(best).padStart(6,'0');
   const keyFor=(c,r)=>`${c},${r}`;
@@ -383,10 +390,10 @@
     remaining=totalDots;
   }
   function center(c,r){return {x:c*TILE+HALF,y:r*TILE+HALF};}
-  function makePlayer(){ const p=center(13,23); return {x:p.x,y:p.y,dir:'left',want:null,mouth:0,alive:true}; }
+  function makePlayer(){ const p={x:canvas.width/2,y:center(13,23).y}; return {x:p.x,y:p.y,dir:'left',want:null,mouth:0,alive:true}; }
   function makeGhost(name,index){ const t=startTiles[index], p=center(t.c,t.r); return {name,index,x:p.x,y:p.y,dir:index===0?'left':'up',mode:'house',houseTimer:index*2.5,releaseQuota:[0,0,30,60][index],fright:0,eyes:false,anim:0,reversePending:false}; }
   function resetRound(keepDots=true){
-    player=makePlayer(); ghosts=names.map(makeGhost); frightened=0; eatChain=0; modeIndex=0; modeTime=0; released=0; releaseTime=0; ghostFreeze=0; ghostEatScore=0;
+    player=makePlayer(); ghosts=names.map(makeGhost); frightened=0; eatChain=0; modeIndex=0; modeTime=0; released=0; releaseTime=0; ghostFreeze=0; ghostEatScore=0; scorePopup=null;
     if(!keepDots){ initializeMaze(); dotCount=0; fruits=[]; }
   }
   resetRound(true);
@@ -614,7 +621,7 @@
       for(const g of ghosts)if(g.mode==='active'&&!g.eyes)g.reversePending=true;
     }
     else addScore(10);
-    if(dotCount===70||dotCount===170)fruits.push({x:center(13,17).x,y:center(13,17).y,life:9,value:level===1?100:level<4?300:500});
+    if(dotCount===70||dotCount===170){const sprite=Math.min(Math.max(level-1,0),7),position=center(13,17);fruits.push({x:position.x,y:position.y,life:9,value:fruitValues[sprite],sprite});}
     if(remaining<=0&&level<256){state='clearing';clearTime=0;player.dir=null;}
   }
   function consumeDotsAlongPath(x0,y0,x1,y1){
@@ -638,14 +645,15 @@
       if(deathTime>=DEATH_IMPACT)fruits=[];
       if(deathTime>=DEATH_TOTAL){
         lives--;
-        if(lives>0){resetRound(true);state='ready';readyTime=0;statusEl.textContent='READY';}
-        else{state='over';statusEl.textContent='GAME OVER';}
+        if(lives>0){resetRound(true);state='ready';readyTime=0;statusEl.textContent='';}
+        else{state='over';statusEl.textContent='';}
       }
       return;
     }
     if(ghostFreeze>0){ghostFreeze=Math.max(0,ghostFreeze-dt);if(ghostFreeze===0)ghostEatScore=0;return;}
+    if(scorePopup){scorePopup.life-=dt;if(scorePopup.life<=0)scorePopup=null;}
     if(state==='clearing'){
-      clearTime+=dt;if(clearTime>1.8){level++;resetRound(false);state='ready';readyTime=0;statusEl.textContent='READY';}return;
+      clearTime+=dt;if(clearTime>1.8){level++;resetRound(false);state='ready';readyTime=0;statusEl.textContent='';}return;
     }
     if(state!=='playing')return;
     elapsed+=dt;
@@ -667,14 +675,14 @@
         ? levelSpeed+(remaining<10?.025:remaining<20?.012:0):levelSpeed;
       tickGhost(g,dt);
     }
-    for(const fruit of fruits){fruit.life-=dt;if(Math.hypot(player.x-fruit.x,player.y-fruit.y)<17){addScore(fruit.value);fruit.life=0;}}
+    for(const fruit of fruits){fruit.life-=dt;if(Math.hypot(player.x-fruit.x,player.y-fruit.y)<17){addScore(fruit.value);scorePopup={x:fruit.x,y:fruit.y-8,value:fruit.value,life:1};fruit.life=0;}}
     fruits=fruits.filter(f=>f.life>0);
     const playerCell=tileAt(player.x,player.y);
     for(const g of ghosts){if(g.mode!=='active')continue;const ghostCell=tileAt(g.x,g.y);if(playerCell.c===ghostCell.c&&playerCell.r===ghostCell.r){
       if(frightened>0&&!g.eyes){
         const points=200*(2**Math.min(eatChain,3));
         g.eyes=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
-        ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;ghostFreeze=1;break;
+        ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;scorePopup={x:g.x,y:g.y-8,value:points,life:1};ghostFreeze=1;break;
       }
       else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;statusEl.textContent='';break;}
     }}
@@ -684,13 +692,24 @@
     ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
     if(atlas.complete&&atlas.naturalWidth){
       ctx.imageSmoothingEnabled=false;
-      // The right-hand maze panel is the supplied, unmodified clean level map.
-      ctx.drawImage(atlas,228,0,224,248,0,0,224,248);
-    }
-    for(const [k,kind] of dots){const [c,r]=k.split(',').map(Number),{x,y}=center(c,r);
-      if(kind==='power'){
-        const pulse=.76+.24*Math.sin(elapsed*5);ctx.fillStyle='#ffd4a2';ctx.beginPath();ctx.arc(x,y,2.7*pulse,0,Math.PI*2);ctx.fill();
-      } else {ctx.fillStyle='#ffe7b0';ctx.fillRect(Math.round(x-1),Math.round(y-1),2,2);}
+      // Use the sprite sheet's dotted maze panel. Cover only the pellets that
+      // have been eaten so the remaining dots keep the sheet's original art.
+      ctx.drawImage(atlas,0,0,224,248,0,0,224,248);
+      ctx.fillStyle='#000';
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        const mark=PELLET_ROWS[r][c];
+        if((mark==='.'||mark==='o')&&!dots.has(keyFor(c,r))){
+          const {x,y}=center(c,r);
+          if(mark==='o'){ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();}
+          else ctx.fillRect(Math.round(x-1.5),Math.round(y-1.5),3,3);
+        }
+      }
+    }else{
+      // Keep a temporary fallback visible until the sprite sheet is ready.
+      for(const [k,kind] of dots){const [c,r]=k.split(',').map(Number),{x,y}=center(c,r);
+        if(kind==='power'){ctx.fillStyle='#ffd4a2';ctx.beginPath();ctx.arc(x,y,2.7,0,Math.PI*2);ctx.fill();}
+        else {ctx.fillStyle='#ffe7b0';ctx.fillRect(Math.round(x-1),Math.round(y-1),2,2);}
+      }
     }
     if(level===256){
       const glyphs='0123456789ABCDEF╳╳';
@@ -721,17 +740,21 @@
   function draw(){
     syncActors();
     drawMaze();
-    for(const f of fruits){ctx.fillStyle='#f22';ctx.beginPath();ctx.arc(f.x,f.y,6,0,7);ctx.fill();ctx.fillStyle='#5f3';ctx.fillRect(f.x+1,f.y-9,3,4);}
-    if(state==='clearing'||state==='over'){
-      ctx.fillStyle='#000b';ctx.fillRect(28,113,168,21);ctx.strokeStyle='#274ff5';ctx.strokeRect(28.5,113.5,167,20);
+    for(const f of fruits){
+      if(atlas.complete&&atlas.naturalWidth)ctx.drawImage(atlas,504+f.sprite*16,48,16,16,f.x-8,f.y-8,16,16);
+      else{ctx.fillStyle='#f22';ctx.beginPath();ctx.arc(f.x,f.y,6,0,7);ctx.fill();ctx.fillStyle='#5f3';ctx.fillRect(f.x+1,f.y-9,3,4);}
+    }
+    if(state==='ready'||state==='clearing'||state==='over'){
+      const message=state==='over'?'GAME OVER':state==='clearing'?'MAZE CLEARED':'READY';
       ctx.fillStyle=state==='over'?'#ff4858':'#ffe500';ctx.font='bold 8px ui-monospace,monospace';ctx.textAlign='center';
-      ctx.fillText(state==='clearing'?'MAZE CLEARED':'GAME OVER',112,126);ctx.textAlign='left';
+      ctx.fillText(message,112,143);ctx.textAlign='left';
     }
   }
   function syncActors(){
     if(!player||!ghosts)return;
     const imageReady=atlas.complete&&atlas.naturalWidth>0;
     const imageScale=(screen.getBoundingClientRect().width||canvas.width)/canvas.width;
+    const frightenedBlink=frightened>0&&frightened<2&&Math.floor(elapsed*8)%2===1;
     const place=(node,actor,w=18,h=18)=>{
       node.style.left=`${actor.x/canvas.width*100}%`;
       node.style.top=`${actor.y/canvas.height*100}%`;
@@ -786,7 +809,9 @@
       node.classList.toggle('sprite',imageReady&&!ghost.eyes);
       if(imageReady&&!ghost.eyes){
         const frame=state==='dead'||ghostFreeze>0?0:Math.floor(elapsed*7)%2;
-        const sourceX=frightened>0?584+frame*16:456+frame*16;
+        // The atlas keeps frightened blue cels at x=584 and flashing white cels at x=616.
+        const frightenedFrame=frightened>0?(frightenedBlink?616:584):null;
+        const sourceX=frightenedFrame===null?456+frame*16:frightenedFrame+frame*16;
         const sourceY=frightened>0?64:64+index*16;
         const spriteScale=imageScale;
         if(node.dataset.spriteReady!=='true'||!node.style.backgroundImage){
@@ -802,11 +827,25 @@
       const hiddenByDeath=state==='dead'&&deathTime>=DEATH_IMPACT;
       node.style.opacity=hiddenByDeath||(ghostFreeze>0&&ghost.eyes)?'0':'1';
     });
-    const showingPoints=ghostFreeze>0&&ghostEatScore>0;
+    const ghostScoreShowing=ghostFreeze>0&&ghostEatScore>0;
+    const shownScore=ghostScoreShowing?{x:ghostEatX,y:ghostEatY-8,value:ghostEatScore}:scorePopup;
+    const scoreFrame=shownScore&&scoreFrames[shownScore.value];
     if(pointsMarker){
-      place(pointsMarker,{x:ghostEatX,y:ghostEatY},32,14);
-      pointsMarker.textContent=String(ghostEatScore);
-      pointsMarker.style.opacity=showingPoints?'1':'0';
+      if(shownScore&&imageReady&&scoreFrame){
+        const scoreScale=imageScale*.8;
+        place(pointsMarker,shownScore,scoreFrame.w*.8,12.8);
+        pointsMarker.textContent='';pointsMarker.classList.add('sprite');
+        pointsMarker.style.backgroundImage=sheetImage;
+        pointsMarker.style.backgroundSize=`${680*scoreScale}px ${248*scoreScale}px`;
+        pointsMarker.style.backgroundPosition=`-${scoreFrame.x*scoreScale}px -${scoreFrame.y*scoreScale}px`;
+        pointsMarker.style.opacity='1';
+      }else if(shownScore){
+        place(pointsMarker,shownScore,24,11.2);
+        pointsMarker.classList.remove('sprite');pointsMarker.style.backgroundImage='';
+        pointsMarker.textContent=String(shownScore.value);pointsMarker.style.opacity='1';
+      }else{
+        pointsMarker.textContent='';pointsMarker.style.opacity='0';
+      }
     }
   }
   function fitCanvas(){
@@ -832,7 +871,7 @@
   }
   function startGame(reset=false){
     if(state==='over'||reset){score=0;lives=3;level=1;extraLife=false;initializeMaze();dotCount=0;fruits=[];resetRound(true);updateHUD();}
-    state='ready';readyTime=0;elapsed=0;statusEl.textContent='READY';syncActors();
+    state='ready';readyTime=0;elapsed=0;statusEl.textContent='';syncActors();
   }
   addEventListener('keydown',e=>{
     const map={ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up'};
