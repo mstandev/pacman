@@ -35,7 +35,6 @@
     .ghost-marker.frightened .eye { display: none; }
     .ghost-marker.eyes { background: transparent; clip-path: none; }
     .ghost-marker.eyes .eye { display: block; }
-    .pacman-marker.dead-fold { background-color: #ffe500; background-image: none !important; border-radius: 50%; mix-blend-mode: screen; -webkit-mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); mask-image: conic-gradient(from 28deg, transparent 0deg var(--death-gap), #000 var(--death-gap) 360deg); }
     .points-marker { width: 32px; min-height: 14px; color: #fff; font: 700 8px ui-monospace, monospace; line-height: 14px; text-align: center; text-shadow: 0 0 4px #fff; white-space: nowrap; pointer-events: none; z-index: 4; }
     .points-marker.sprite { color: transparent; text-shadow: none; background-repeat: no-repeat; mix-blend-mode: screen; }
     .stats { width: min(100%, 560px); margin: 12px auto 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: #aeb8d0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
@@ -365,9 +364,9 @@
   function readBest(){try{return Number(window.localStorage.getItem('pacman-best')||0);}catch{return 0;}}
   function saveBest(value){try{window.localStorage.setItem('pacman-best',String(value));}catch{}}
   let player, ghosts, fruits=[], scorePopup=null, score=0, best=readBest(), lives=3, level=1;
-  let state='ready', lastTime=0, elapsed=0, modeIndex=0, modeTime=0, frightened=0, eatChain=0, dotCount=0, deathTime=0, deathPacFrame=2, clearTime=0, releaseTime=0, released=0, readyTime=0, ghostFreeze=0, ghostEatScore=0, ghostEatX=0, ghostEatY=0, extraLife=false;
+  let state='ready', lastTime=0, elapsed=0, modeIndex=0, modeTime=0, frightened=0, eatChain=0, dotCount=0, deathTime=0, clearTime=0, releaseTime=0, released=0, readyTime=0, ghostFreeze=0, ghostEatScore=0, ghostEatX=0, ghostEatY=0, extraLife=false;
   const DEATH_IMPACT=1, DEATH_FOLD=1.2, DEATH_SPARK=.22, DEATH_EMPTY=.35;
-  const DEATH_TOTAL=DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK+DEATH_EMPTY;
+  const DEATH_TOTAL=DEATH_FOLD+DEATH_SPARK+DEATH_EMPTY;
   const modeDurations = [7,20,7,20,5,20,5,Infinity];
   const speeds = { player:.105, ghost:.092, frightened:.064, tunnel:.065 };
   const fruitValues=[100,300,500,700,1000,2000,3000,5000];
@@ -680,7 +679,7 @@
         g.eyes=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
         ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;scorePopup={x:g.x,y:g.y-8,value:points,life:1};ghostFreeze=1;break;
       }
-      else if(!g.eyes){state='dead';deathTime=0;deathPacFrame=Math.floor(elapsed*10)%3;statusEl.textContent='';break;}
+      else if(!g.eyes){state='dead';deathTime=0;statusEl.textContent='';break;}
     }}
     if(state==='playing')consumeDotsAlongPath(previousX,previousY,player.x,player.y);
   }
@@ -718,9 +717,7 @@
     }
   }
   function drawPac(){
-    if(state==='dead'){
-      const p=clamp(deathTime/1.15,0,1),radius=8*(1-p);ctx.fillStyle='#ffe500';ctx.beginPath();ctx.arc(player.x,player.y,radius,0,Math.PI*2);ctx.fill();return;
-    }
+    if(state==='dead')return;
     const dir=player.dir||player.want||'left',angle={right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[dir];
     const moving=state==='playing'&&player.dir!==null,open=moving?(0.1+.26*(.5+.5*Math.sin(elapsed*13))):.06;
     ctx.fillStyle='#ffe500';ctx.beginPath();ctx.moveTo(player.x,player.y);ctx.arc(player.x,player.y,9.2,angle+open,angle+Math.PI*2-open);ctx.closePath();ctx.fill();
@@ -761,28 +758,23 @@
     // The supplied player cels face right by default; rotate them toward travel.
     const angle={right:0,left:180,down:90,up:270}[direction];
     const moving=state==='playing'&&player.toX!=null;
-    let pacFrame=state==='dead'?deathPacFrame:(moving?Math.floor(elapsed*10)%3:2);
+    let pacFrame=moving?Math.floor(elapsed*10)%3:2;
     let pacSourceX=456+pacFrame*16,pacSourceY=0,pacSize=16,pacAngle=angle;
-    let deathFold=false,pacOpacity=ghostFreeze>0?0:1;
+    let pacOpacity=ghostFreeze>0?0:1;
     if(state==='dead'){
       pacOpacity=1;
-      if(deathTime<DEATH_IMPACT){
-        pacSourceX=456+deathPacFrame*16;
-      }else if(deathTime<DEATH_IMPACT+DEATH_FOLD){
-        deathFold=true;pacSourceX=488;pacAngle=0;
-        const progress=clamp((deathTime-DEATH_IMPACT)/DEATH_FOLD,0,1);
-        pacMarker.style.setProperty('--death-gap',`${28+progress*330}deg`);
-      }else if(deathTime<DEATH_IMPACT+DEATH_FOLD+DEATH_SPARK){
+      pacAngle=0;
+      if(deathTime<DEATH_FOLD){
+        const deathFrame=Math.min(9,Math.floor(clamp(deathTime/DEATH_FOLD,0,.9999)*10));
+        pacSourceX=504+deathFrame*16;
+      }else if(deathTime<DEATH_FOLD+DEATH_SPARK){
         pacSourceX=664;pacAngle=0;
-        const progress=(deathTime-DEATH_IMPACT-DEATH_FOLD)/DEATH_SPARK;
-        pacSize=16+progress*4;
       }else{
         pacOpacity=0;
       }
     }
     place(pacMarker,player,pacSize,pacSize);
     pacMarker.classList.toggle('sprite',imageReady);
-    pacMarker.classList.toggle('dead-fold',deathFold);
     pacMarker.style.setProperty('--death-opacity',String(pacOpacity));
     pacMarker.style.opacity=String(pacOpacity);
     pacMarker.style.setProperty('--facing',`${pacAngle}deg`);
