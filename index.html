@@ -23,7 +23,7 @@
     .pacman-marker.sprite { border-radius: 0; background-color: transparent; background-repeat: no-repeat; box-shadow: none; mix-blend-mode: screen; transform: translate(-50%, -50%) rotate(var(--facing, 0deg)); }
     .pacman-marker.sprite::after { display: none; }
     .pacman-marker.dead { transform: translate(-50%, -50%) rotate(var(--facing, 0deg)); box-shadow: none; }
-    .ghost-marker { background: var(--ghost-color); border-radius: 50% 50% 4% 4%; clip-path: polygon(0 24%, 12% 0, 50% 0, 88% 0, 100% 24%, 100% 100%, 75% 82%, 50% 100%, 25% 82%, 0 100%); }
+    .ghost-marker { background: var(--ghost-color); border-radius: 50% 50% 4% 4%; clip-path: polygon(0 24%, 12% 0, 50% 0, 88% 0, 100% 24%, 100% 100%, 75% 82%, 50% 100%, 25% 82%, 0 100%); filter: blur(.45px); }
     .ghost-marker.frightened { background: #254ce9; }
     .ghost-marker.sprite { background-color: transparent; background-repeat: no-repeat; border-radius: 0; clip-path: none; mix-blend-mode: screen; }
     .ghost-marker.sprite .eye { display: none; }
@@ -821,7 +821,7 @@
       node.style.setProperty('--eye-x',`${look[0]*imageScale}px`);
       node.style.setProperty('--eye-y',`${look[1]*imageScale}px`);
       const hiddenByDeath=state==='dead'&&deathTime>=DEATH_IMPACT;
-      node.style.opacity=hiddenByDeath||(ghostFreeze>0&&ghost.eyes)?'0':'1';
+      node.style.opacity=hiddenByDeath||(ghostFreeze>0&&ghost.eyes)?'0':'.86';
     });
     const ghostScoreShowing=ghostFreeze>0&&ghostEatScore>0;
     const shownScore=ghostScoreShowing?{x:ghostEatX,y:ghostEatY-8,value:ghostEatScore}:scorePopup;
