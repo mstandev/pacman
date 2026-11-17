@@ -634,11 +634,7 @@
     }
   }
   function update(dt){
-    if(state==='ready'){
-      readyTime+=dt;
-      if(readyTime>=1.2){state='playing';player.dir='left';player.want=null;statusEl.textContent='';}
-      return;
-    }
+    if(state==='ready')return;
     if(state==='paused')return;
     if(state==='dead'){
       deathTime+=dt;
@@ -861,8 +857,12 @@
     canvas.style.height=`${height}px`;
   }
   function setDirection(d){
-    if(!directions[d]||state==='ready'||state==='dead'||state==='paused'||state==='clearing'||ghostFreeze>0)return;
-    if(state==='over'){startGame(true);return;}
+    if(!directions[d]||state==='dead'||state==='paused'||state==='clearing'||ghostFreeze>0)return;
+    if(state==='over')startGame(true);
+    if(state==='ready'){
+      player.dir=d;player.want=null;state='playing';readyTime=0;elapsed=0;statusEl.textContent='';
+      return;
+    }
     player.want=d;
     if(player.dir&&d===opposite[player.dir]){
       if(player.toX!=null){const oldToX=player.toX,oldToY=player.toY;player.toX=player.fromX;player.toY=player.fromY;player.fromX=oldToX;player.fromY=oldToY;}
