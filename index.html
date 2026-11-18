@@ -87,6 +87,7 @@
   const wallCtx = wallOverlay.getContext('2d');
   const pacMarker = document.querySelector('#pacman-marker');
   const ghostMarkers = [...document.querySelectorAll('.ghost-marker')];
+  const actorLayer = document.querySelector('.actor-layer');
   const pointsMarker = document.querySelector('#points-marker');
   const atlas = new Image();
   const wallPixels = new Uint8Array(canvas.width * canvas.height);
@@ -390,8 +391,15 @@
   }
   function center(c,r){return {x:c*TILE+HALF,y:r*TILE+HALF};}
   function makePlayer(){ const p={x:canvas.width/2,y:center(13,23).y}; return {x:p.x,y:p.y,dir:'left',want:null,mouth:0,alive:true}; }
-  function makeGhost(name,index){ const t=startTiles[index], p=center(t.c,t.r); return {name,index,x:p.x,y:p.y,dir:index===0?'left':'up',mode:'house',houseTimer:index*2.5,releaseQuota:[0,0,30,60][index],fright:0,eyes:false,anim:0,reversePending:false}; }
+  function makeGhost(name,index){ const t=startTiles[index], p=center(t.c,t.r); return {name,index,x:p.x,y:p.y,dir:index===0?'left':'up',mode:'house',houseTimer:index*2.5,releaseQuota:[0,0,30,60][index],fright:0,eyes:false,anim:0,reversePending:false,hasReleased:false,duplicatePending:false,returnReleaseAt:null}; }
+  function makeGhostMarker(name){
+    const node=document.createElement('div');node.className='actor-marker ghost-marker';node.dataset.ghost=name;
+    node.style.setProperty('--ghost-color',colors[name]);
+    for(let i=0;i<2;i++){const eye=document.createElement('span');eye.className='eye';eye.append(document.createElement('i'));node.append(eye);}
+    actorLayer.append(node);return node;
+  }
   function resetRound(keepDots=true){
+    while(ghostMarkers.length>names.length)ghostMarkers.pop().remove();
     player=makePlayer(); ghosts=names.map(makeGhost); frightened=0; eatChain=0; modeIndex=0; modeTime=0; released=0; releaseTime=0; ghostFreeze=0; ghostEatScore=0; scorePopup=null;
     if(!keepDots){ initializeMaze(); dotCount=0; fruits=[]; }
   }
@@ -582,8 +590,13 @@
     releaseTime+=dt;
     for(let i=0;i<ghosts.length;i++){
       const g=ghosts[i]; if(g.mode!=='house')continue;
+      if(g.returnReleaseAt!==null){
+        if(elapsed>=g.returnReleaseAt){g.mode='active';g.dir='up';g.exitingHouse=true;g.y=center(13,14).y;g.returnReleaseAt=null;}
+        continue;
+      }
+      if(g.hasReleased)continue;
       // Start Blinky early enough to clear the box by 1.5s; stagger later ghosts by 1s.
-      if(releaseTime>=.75+i) {g.mode='active';g.dir='up';g.exitingHouse=true;g.y=center(13,14).y;released++;}
+      if(releaseTime>=.75+i) {g.mode='active';g.dir='up';g.exitingHouse=true;g.y=center(13,14).y;g.hasReleased=true;released++;}
     }
   }
   function tickGhost(g,dt){
@@ -594,7 +607,16 @@
     const t=tileAt(g.x,g.y);
     if(g.eyes&&t.c===13&&t.r===14){
       const slot=center(startTiles[g.index].c,startTiles[g.index].r);
-      g.eyes=false;g.mode='house';g.x=slot.x;g.y=slot.y;g.houseTimer=0;g.dir='up';return;
+      const duplicateOnReturn=g.duplicatePending;
+      g.eyes=false;g.mode='house';g.x=slot.x;g.y=slot.y;g.houseTimer=0;g.dir='up';g.hasReleased=true;
+      g.returnReleaseAt=duplicateOnReturn?elapsed+.05:null;
+      if(duplicateOnReturn){
+        g.duplicatePending=false;
+        const duplicate=makeGhost(g.name,g.index);
+        duplicate.x=slot.x;duplicate.y=slot.y;duplicate.houseTimer=0;duplicate.hasReleased=true;duplicate.returnReleaseAt=elapsed+.45;
+        ghosts.push(duplicate);ghostMarkers.push(makeGhostMarker(duplicate.name));
+      }
+      return;
     }
     if(g.toX==null&&atDecision(g)){
       g.x=t.c*TILE+HALF;g.y=t.r*TILE+HALF;
@@ -676,7 +698,7 @@
     for(const g of ghosts){if(g.mode!=='active')continue;const ghostCell=tileAt(g.x,g.y);if(playerCell.c===ghostCell.c&&playerCell.r===ghostCell.r){
       if(frightened>0&&!g.eyes){
         const points=200*(2**Math.min(eatChain,3));
-        g.eyes=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
+        g.eyes=true;g.duplicatePending=true;g.dir=opposite[g.dir];addScore(points);eatChain++;
         ghostEatScore=points;ghostEatX=g.x;ghostEatY=g.y;scorePopup={x:g.x,y:g.y-8,value:points,life:1};ghostFreeze=1;break;
       }
       else if(!g.eyes){state='dead';deathTime=0;statusEl.textContent='';break;}
